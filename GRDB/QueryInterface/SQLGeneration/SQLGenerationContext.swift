@@ -32,7 +32,7 @@ public final class SQLGenerationContext {
     /// Access to the database connection, the arguments sink, and resolved
     /// names of table aliases from outer contexts (useful in case of
     /// subquery generation).
-    private let parent: Parent
+    private var parent: Parent
     
     /// The arguments sink which prevents SQL injection.
     private var argumentsSink: StatementArgumentsSink {
@@ -81,6 +81,23 @@ public final class SQLGenerationContext {
         argumentsSink.append(arguments: arguments)
     }
     
+    /// Derive arguments added inside `block` into the `arguments` parameter.
+    func recordingArguments<T>(_ arguments: inout StatementArguments, _ block: () throws -> T) rethrows -> T {
+        switch parent {
+        case let .context(context):
+            return try context.recordingArguments(&arguments, block)
+        case let .none(db: db, argumentsSink: argumentsSink):
+            let oldParent = parent
+            let argumentsSink = argumentsSink.emptyCopy()
+            self.parent = .none(db: db, argumentsSink: argumentsSink)
+            defer {
+                arguments += argumentsSink.arguments
+                self.parent = oldParent
+            }
+            return try block()
+        }
+    }
+
     /// May be nil, when a qualifier is not needed:
     ///
     /// WHERE <qualifier>.column == 1
@@ -141,6 +158,10 @@ class StatementArgumentsSink {
     /// A sink which accepts arguments
     convenience init() {
         self.init(rawSQL: false)
+    }
+    
+    func emptyCopy() -> StatementArgumentsSink {
+        StatementArgumentsSink(rawSQL: rawSQL)
     }
     
     // fileprivate so that SQLGenerationContext.append(arguments:) is the only

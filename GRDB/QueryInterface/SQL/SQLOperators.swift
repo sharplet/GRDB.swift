@@ -593,7 +593,8 @@ extension SQLAssociativeBinaryOperator {
     public static let add = SQLAssociativeBinaryOperator(
         sql: "+",
         neutralValue: 0.databaseValue,
-        strictlyAssociative: false)
+        strictlyAssociative: false,
+        idempotent: false)
     
     /// The `*` binary operator
     ///
@@ -604,7 +605,8 @@ extension SQLAssociativeBinaryOperator {
     public static let multiply = SQLAssociativeBinaryOperator(
         sql: "*",
         neutralValue: 1.databaseValue,
-        strictlyAssociative: false)
+        strictlyAssociative: false,
+        idempotent: false)
 }
 
 extension SQLUnaryOperator {
@@ -729,7 +731,8 @@ extension SQLAssociativeBinaryOperator {
     public static let and = SQLAssociativeBinaryOperator(
         sql: "AND",
         neutralValue: true.databaseValue,
-        strictlyAssociative: true)
+        strictlyAssociative: true,
+        idempotent: true)
     
     /// The `OR` binary operator
     ///
@@ -740,7 +743,8 @@ extension SQLAssociativeBinaryOperator {
     public static let or = SQLAssociativeBinaryOperator(
         sql: "OR",
         neutralValue: false.databaseValue,
-        strictlyAssociative: true)
+        strictlyAssociative: true,
+        idempotent: true)
 }
 
 /// A logical SQL expression with the `AND` SQL operator.
@@ -835,7 +839,8 @@ extension SQLAssociativeBinaryOperator {
     public static let concat = SQLAssociativeBinaryOperator(
         sql: "||",
         neutralValue: "".databaseValue,
-        strictlyAssociative: true)
+        strictlyAssociative: true,
+        idempotent: false)
 }
 
 // MARK: - Match Operator

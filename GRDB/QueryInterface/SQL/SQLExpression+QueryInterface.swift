@@ -217,21 +217,31 @@ public struct SQLAssociativeBinaryOperator: Hashable {
     
     /// [**Experimental**](http://github.com/groue/GRDB.swift#what-are-experimental-features)
     ///
-    /// if true, (a • b) • c is strictly equal to a • (b • c).
+    /// if true, (a • b) • c is equal to a • (b • c).
     ///
     /// `AND`, `OR`, `||` (concat) are stricly associative.
     ///
-    /// + and * are not stricly associative when applied to floating
+    /// `+` and `*` are not stricly associative when applied to floating
     /// point values.
-    public let strictlyAssociative: Bool
+    public let isStrictlyAssociative: Bool
+    
+    /// [**Experimental**](http://github.com/groue/GRDB.swift#what-are-experimental-features)
+    ///
+    /// if true, (a • a) is equal to a.
+    ///
+    /// `AND`, `OR` are idempotent.
+    ///
+    /// `||` (concat), `+` and `*` are not idempotent.
+    public let isIdempotent: Bool
     
     /// [**Experimental**](http://github.com/groue/GRDB.swift#what-are-experimental-features)
     ///
     /// Creates a binary operator
-    public init(sql: String, neutralValue: DatabaseValue, strictlyAssociative: Bool) {
+    public init(sql: String, neutralValue: DatabaseValue, strictlyAssociative: Bool, idempotent: Bool) {
         self.sql = sql
         self.neutralValue = neutralValue
-        self.strictlyAssociative = strictlyAssociative
+        self.isStrictlyAssociative = strictlyAssociative
+        self.isIdempotent = idempotent
     }
 }
 
@@ -252,7 +262,7 @@ struct SQLExpressionBinaryReduce: SQLExpression {
         self.op = op
         
         // flatten when possible: a • (b • c) = a • b • c
-        if op.strictlyAssociative {
+        if op.isStrictlyAssociative {
             self.expressions = expressions.flatMap { expression -> [SQLExpression] in
                 if let reduce = expression as? SQLExpressionBinaryReduce, reduce.op == op {
                     return reduce.expressions
@@ -272,13 +282,48 @@ struct SQLExpressionBinaryReduce: SQLExpression {
         if expressions.count == 1 {
             return try first.expressionSQL(context, wrappedInParenthesis: wrappedInParenthesis)
         }
-        let expressionSQLs = try expressions.map { try $0.expressionSQL(context, wrappedInParenthesis: true) }
+        
+        let expressionSQLs = try self.expressionSQLs(context)
         let joiner = " \(op.sql) "
         if wrappedInParenthesis {
             return "(\(expressionSQLs.joined(separator: joiner)))"
         } else {
             return expressionSQLs.joined(separator: joiner)
         }
+    }
+    
+    private func expressionSQLs(_ context: SQLGenerationContext) throws -> [String] {
+        guard op.isIdempotent && op.isStrictlyAssociative else {
+            return try expressions.map { try $0.expressionSQL(context, wrappedInParenthesis: true) }
+        }
+        
+        // SQL optimization for idempotent associative operators:
+        // avoid outputting the same expression multiple times.
+        //
+        // We assume the user will never want to write expressions such as
+        // `sideEffect() AND sideEffect()`!
+        struct Element: Hashable {
+            var sql: String
+            var arguments: StatementArguments
+        }
+        var expressionSQLs: [String] = []
+        var distinctElements = Set<Element>()
+        for expression in expressions {
+            var arguments = StatementArguments()
+            let sql = try context.recordingArguments(&arguments) {
+                try expression.expressionSQL(context, wrappedInParenthesis: true)
+            }
+            let element = Element(sql: sql, arguments: arguments)
+            let (inserted, _) = distinctElements.insert(element)
+            if inserted {
+                if context.append(arguments: element.arguments) == false {
+                    // GRDB bug
+                    fatalError("Could not handle statement arguments")
+                }
+                expressionSQLs.append(element.sql)
+            }
+        }
+        return expressionSQLs
     }
     
     func qualifiedExpression(with alias: TableAlias) -> SQLExpression {

@@ -849,7 +849,7 @@ class QueryInterfaceExpressionsTests: GRDBTestCase {
             "SELECT * FROM \"readers\" WHERE 0")
         XCTAssertEqual(
             sql(dbQueue, tableRequest.filter([false.databaseValue].joined(operator: .and) || false)),
-            "SELECT * FROM \"readers\" WHERE 0 OR 0")
+            "SELECT * FROM \"readers\" WHERE 0")
         XCTAssertEqual(
             sql(dbQueue, tableRequest.filter([Col.id == 1].joined(operator: .and))),
             "SELECT * FROM \"readers\" WHERE \"id\" = 1")
@@ -859,6 +859,9 @@ class QueryInterfaceExpressionsTests: GRDBTestCase {
         XCTAssertEqual(
             sql(dbQueue, tableRequest.filter([Col.id == 1, Col.name != nil].joined(operator: .and))),
             "SELECT * FROM \"readers\" WHERE (\"id\" = 1) AND (\"name\" IS NOT NULL)")
+        XCTAssertEqual(
+            sql(dbQueue, tableRequest.filter([Col.id == 1, Col.name != nil, Col.id == 1, Col.id == 2].joined(operator: .and))),
+            "SELECT * FROM \"readers\" WHERE (\"id\" = 1) AND (\"name\" IS NOT NULL) AND (\"id\" = 2)")
         XCTAssertEqual(
             sql(dbQueue, tableRequest.filter([Col.id == 1, Col.name != nil].joined(operator: .and) || false)),
             "SELECT * FROM \"readers\" WHERE ((\"id\" = 1) AND (\"name\" IS NOT NULL)) OR 0")
@@ -887,7 +890,7 @@ class QueryInterfaceExpressionsTests: GRDBTestCase {
             "SELECT * FROM \"readers\" WHERE 1")
         XCTAssertEqual(
             sql(dbQueue, tableRequest.filter([true.databaseValue].joined(operator: .or) && true)),
-            "SELECT * FROM \"readers\" WHERE 1 AND 1")
+            "SELECT * FROM \"readers\" WHERE 1")
         XCTAssertEqual(
             sql(dbQueue, tableRequest.filter([Col.id == 1].joined(operator: .or))),
             "SELECT * FROM \"readers\" WHERE \"id\" = 1")
@@ -897,6 +900,9 @@ class QueryInterfaceExpressionsTests: GRDBTestCase {
         XCTAssertEqual(
             sql(dbQueue, tableRequest.filter([Col.id == 1, Col.name != nil].joined(operator: .or))),
             "SELECT * FROM \"readers\" WHERE (\"id\" = 1) OR (\"name\" IS NOT NULL)")
+        XCTAssertEqual(
+            sql(dbQueue, tableRequest.filter([Col.id == 1, Col.name != nil, Col.id == 1, Col.id == 2].joined(operator: .or))),
+            "SELECT * FROM \"readers\" WHERE (\"id\" = 1) OR (\"name\" IS NOT NULL) OR (\"id\" = 2)")
         XCTAssertEqual(
             sql(dbQueue, tableRequest.filter([Col.id == 1, Col.name != nil].joined(operator: .or) && true)),
             "SELECT * FROM \"readers\" WHERE ((\"id\" = 1) OR (\"name\" IS NOT NULL)) AND 1")
