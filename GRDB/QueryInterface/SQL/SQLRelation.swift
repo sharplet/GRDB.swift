@@ -203,14 +203,19 @@ struct SQLRelation {
     }
 }
 
-extension SQLRelation: Refinable {
+extension SQLRelation: Refinable { }
+
+extension SQLRelation: SelectionRequest {
     func select(_ selection: @escaping (Database) throws -> [SQLSelectable]) -> Self {
         with(\.selectionPromise, DatabasePromise(selection))
     }
     
-    // Convenience
-    func select(_ selection: [SQLSelectable]) -> Self {
-        select { _ in selection }
+    func annotated(with selection: @escaping (Database) throws -> [SQLSelectable]) -> Self {
+        map(\.selectionPromise) { selectionPromise in
+            DatabasePromise { db in
+                try selectionPromise.resolve(db) + selection(db)
+            }
+        }
     }
     
     func droppingChildrenSelection() -> Self {
@@ -224,20 +229,9 @@ extension SQLRelation: Refinable {
             }
         }
     }
-    
-    func annotated(with selection: @escaping (Database) throws -> [SQLSelectable]) -> Self {
-        map(\.selectionPromise) { selectionPromise in
-            DatabasePromise { db in
-                try selectionPromise.resolve(db) + selection(db)
-            }
-        }
-    }
-    
-    // Convenience
-    func annotated(with selection: [SQLSelectable]) -> Self {
-        annotated(with: { _ in selection })
-    }
-    
+}
+
+extension SQLRelation: FilteredRequest {
     func filter(_ predicate: @escaping (Database) throws -> SQLExpressible) -> Self {
         map(\.filtersPromise) { filtersPromise in
             DatabasePromise { db in
@@ -245,7 +239,9 @@ extension SQLRelation: Refinable {
             }
         }
     }
-    
+}
+
+extension SQLRelation: OrderedRequest {
     func order(_ orderings: @escaping (Database) throws -> [SQLOrderingTerm]) -> Self {
         with(\.ordering, SQLRelation.Ordering(orderings: orderings))
     }
@@ -258,7 +254,31 @@ extension SQLRelation: Refinable {
         self.with(\.ordering, SQLRelation.Ordering())
             .map(\.children, { $0.mapValues { $0.map(\.relation, { $0.unordered() }) } })
     }
+}
+
+extension SQLRelation: _JoinableRequest {
+    func _including(all association: SQLAssociation) -> Self {
+        appendingChild(for: association, kind: .allPrefetched)
+    }
     
+    func _including(optional association: SQLAssociation) -> Self {
+        appendingChild(for: association, kind: .oneOptional)
+    }
+    
+    func _including(required association: SQLAssociation) -> Self {
+        appendingChild(for: association, kind: .oneRequired)
+    }
+    
+    func _joining(optional association: SQLAssociation) -> Self {
+        appendingChild(for: association.map(\.destination.relation, { $0.select([]) }), kind: .oneOptional)
+    }
+    
+    func _joining(required association: SQLAssociation) -> Self {
+        appendingChild(for: association.map(\.destination.relation, { $0.select([]) }), kind: .oneRequired)
+    }
+}
+
+extension SQLRelation {
     func qualified(with alias: TableAlias) -> Self {
         map(\.source) { $0.qualified(with: alias) }
     }
@@ -397,28 +417,6 @@ extension SQLRelation {
                     }
                 })
         }
-    }
-}
-
-extension SQLRelation: _JoinableRequest {
-    func _including(all association: SQLAssociation) -> Self {
-        appendingChild(for: association, kind: .allPrefetched)
-    }
-    
-    func _including(optional association: SQLAssociation) -> Self {
-        appendingChild(for: association, kind: .oneOptional)
-    }
-    
-    func _including(required association: SQLAssociation) -> Self {
-        appendingChild(for: association, kind: .oneRequired)
-    }
-    
-    func _joining(optional association: SQLAssociation) -> Self {
-        appendingChild(for: association.map(\.destination.relation, { $0.select([]) }), kind: .oneOptional)
-    }
-    
-    func _joining(required association: SQLAssociation) -> Self {
-        appendingChild(for: association.map(\.destination.relation, { $0.select([]) }), kind: .oneRequired)
     }
 }
 

@@ -22,39 +22,9 @@ extension SQLQuery: Refinable {
     }
     
     func qualified(with alias: TableAlias) -> Self {
-        // We do not need to qualify group and having clauses. They will be
+        // We do not qualify group and having clauses now. They will be
         // in SQLQueryGenerator.init()
         map(\.relation) { $0.qualified(with: alias) }
-    }
-}
-
-extension SQLQuery: SelectionRequest {
-    func select(_ selection: @escaping (Database) throws -> [SQLSelectable]) -> Self {
-        map(\.relation) { $0.select(selection) }
-    }
-    
-    func annotated(with selection: @escaping (Database) throws -> [SQLSelectable]) -> Self {
-        map(\.relation) { $0.annotated(with: selection) }
-    }
-}
-
-extension SQLQuery: FilteredRequest {
-    func filter(_ predicate: @escaping (Database) throws -> SQLExpressible) -> Self {
-        map(\.relation) { $0.filter(predicate) }
-    }
-}
-
-extension SQLQuery: OrderedRequest {
-    func order(_ orderings: @escaping (Database) throws -> [SQLOrderingTerm]) -> Self {
-        map(\.relation) { $0.order(orderings) }
-    }
-    
-    func reversed() -> Self {
-        map(\.relation) { $0.reversed() }
-    }
-    
-    func unordered() -> Self {
-        map(\.relation) { $0.unordered() }
     }
 }
 
@@ -69,28 +39,6 @@ extension SQLQuery: AggregatingRequest {
                 try havingExpressionsPromise.resolve(db) + [predicate(db).sqlExpression]
             }
         }
-    }
-}
-
-extension SQLQuery: _JoinableRequest {
-    func _including(all association: SQLAssociation) -> Self {
-        map(\.relation) { $0._including(all: association) }
-    }
-    
-    func _including(optional association: SQLAssociation) -> Self {
-        map(\.relation) { $0._including(optional: association) }
-    }
-    
-    func _including(required association: SQLAssociation) -> Self {
-        map(\.relation) { $0._including(required: association) }
-    }
-    
-    func _joining(optional association: SQLAssociation) -> Self {
-        map(\.relation) { $0._joining(optional: association) }
-    }
-    
-    func _joining(required association: SQLAssociation) -> Self {
-        map(\.relation) { $0._joining(required: association) }
     }
 }
 
@@ -122,13 +70,13 @@ extension SQLQuery {
             guard let count = selection[0].count(distinct: isDistinct) else {
                 return trivialCountQuery
             }
-            var countQuery = self.unordered()
+            var countQuery = map(\.relation) { $0.unordered() }
             countQuery.isDistinct = false
             switch count {
             case .all:
-                countQuery = countQuery.select(SQLExpressionCount(AllColumns()))
+                countQuery = countQuery.map(\.relation) { $0.select(SQLExpressionCount(AllColumns())) }
             case .distinct(let expression):
-                countQuery = countQuery.select(SQLExpressionCountDistinct(expression))
+                countQuery = countQuery.map(\.relation) { $0.select(SQLExpressionCountDistinct(expression)) }
             }
             return countQuery
         } else {
@@ -141,14 +89,14 @@ extension SQLQuery {
             // SELECT expr1, expr2, ... FROM tableName ...
             // ->
             // SELECT COUNT(*) FROM tableName ...
-            return self.unordered().select(SQLExpressionCount(AllColumns()))
+            return map(\.relation) { $0.unordered().select(SQLExpressionCount(AllColumns())) }
         }
     }
     
     // SELECT COUNT(*) FROM (self)
     private var trivialCountQuery: SQLQuery {
         let relation = SQLRelation(
-            source: .subquery(unordered()),
+            source: .subquery(map(\.relation) { $0.unordered() }),
             selectionPromise: DatabasePromise(value: [SQLExpressionCount(AllColumns())]))
         return SQLQuery(relation: relation)
     }
