@@ -125,15 +125,20 @@ struct SQLRelation {
         var condition: SQLAssociationCondition
         var relation: SQLRelation
         
-        /// Returns true iff this child can change the parent count.
+        /// Returns true iff this child may have an impact on the
+        /// parent definition.
         ///
-        /// Record.including(required: association) // true
-        /// Record.including(all: association)      // false
-        var impactsParentCount: Bool {
+        /// For example:
+        ///
+        ///     Parent.including(required: child) // true
+        ///     Parent.including(all: children)   // false
+        var impactsParentDefinition: Bool {
             switch kind {
             case .oneOptional, .oneRequired:
+                // Implemented as a SQL join => yes there is an impact
                 return true
             case .allPrefetched, .allNotPrefetched:
+                // Implemented as a distinct SQL request => no there is no impact
                 return false
             }
         }
@@ -208,9 +213,16 @@ extension SQLRelation: Refinable {
         select { _ in selection }
     }
     
-    /// Removes all selections from chidren
-    func selectOnly(_ selection: [SQLSelectable]) -> Self {
-        select(selection).map(\.children, { $0.mapValues { $0.map(\.relation, { $0.selectOnly([]) }) } })
+    func droppingChildrenSelection() -> Self {
+        map(\.children) { children in
+            children.mapValues { child in
+                child.map(\.relation) { relation in
+                    relation
+                        .select([])
+                        .droppingChildrenSelection()
+                }
+            }
+        }
     }
     
     func annotated(with selection: @escaping (Database) throws -> [SQLSelectable]) -> Self {
@@ -372,8 +384,19 @@ extension SQLRelation {
         mapInto(\.children) { $0.removeValue(forKey: key) }
     }
     
-    func filteringChildren(_ included: (Child) throws -> Bool) rethrows -> Self {
-        try map(\.children) { try $0.filter { try included($1) } }
+    /// Performs a recursive filtering, in children, and chidren of children
+    func filteringChildren(_ isIncluded: (Child) throws -> Bool) rethrows -> Self {
+        try map(\.children) { children in
+            try children
+                .filter({ _, child in
+                    try isIncluded(child)
+                })
+                .mapValues({ child in
+                    try child.map(\.relation) { relation in
+                        try relation.filteringChildren(isIncluded)
+                    }
+                })
+        }
     }
 }
 
@@ -596,7 +619,7 @@ struct SQLAssociationCondition: Equatable {
     ///
     /// Given `right.a = left.b`, returns `right.a = 1` or
     /// `right.a IN (1, 2, 3)`.
-    func filteringExpression<Row: ColumnAddressable>(_ db: Database, leftRows: [Row]) throws -> SQLExpression {
+    func expression<Row: ColumnAddressable>(_ db: Database, leftRows: [Row]) throws -> SQLExpression {
         guard let firstLeftRow = leftRows.first else {
             // Degenerate case: there is no row to attach
             return false.sqlExpression

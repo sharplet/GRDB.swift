@@ -99,37 +99,19 @@ public /* TODO: internal */ struct SQLAssociation {
     /// association as a relation.
     ///
     /// This method provides support for association methods such
-    /// as `request(for:)`:
+    /// as `request(for:)`, and also eager loading of hasMany associations.
     ///
-    ///     struct Destination: TableRecord { }
-    ///     struct Origin: TableRecord, EncodableRecord {
-    ///         static let destinations = hasMany(Destination.self)
-    ///         var destinations: QueryInterface<Destination> {
-    ///             return request(for: Origin.destinations)
-    ///         }
+    /// For example:
+    ///
+    ///     struct Child: TableRecord { }
+    ///     struct Parent: TableRecord, EncodableRecord {
+    ///         static let children = hasMany(Child.self)
     ///     }
     ///
-    ///     // SELECT destination.*
-    ///     // FROM destination
-    ///     // WHERE destination.originId = 1
-    ///     let origin = Origin(id: 1)
-    ///     let destinations = origin.destinations.fetchAll(db)
-    ///
-    /// At low-level, this gives:
-    ///
-    ///     let origin = Origin(id: 1)
-    ///     let originAlias = TableAlias(tableName: Origin.databaseTableName)
-    ///     let sqlAssociation = Origin.destination.sqlAssociation
-    ///     let destinationRelation = sqlAssociation.destinationRelation(
-    ///         from: originAlias,
-    ///         rows: { db in try [Row(PersistenceContainer(db, origin))] })
-    ///     let query = SQLQuery(relation: destinationRelation)
-    ///     let generator = SQLQueryGenerator(query)
-    ///     let statement, _ = try generator.prepare(db)
-    ///     print(statement.sql)
-    ///     // SELECT destination.*
-    ///     // FROM destination
-    ///     // WHERE destination.originId = 1
+    ///     // This is the "destination relation":
+    ///     // SELECT child.* FROM child WHERE child.parentId = 1
+    ///     let parent = Parent(id: 1)
+    ///     let children = parent.request(for: Parent.children).fetchAll(db)
     ///
     /// This method works for simple direct associations such as BelongsTo or
     /// HasMany in the above examples, but also for indirect associations such
@@ -140,50 +122,26 @@ public /* TODO: internal */ struct SQLAssociation {
         -> SQLRelation
         where Row: ColumnAddressable
     {
-        // Filter the pivot: `pivot.originId = 123` or `pivot.originId IN (1, 2, 3)`
-        let pivot = self.pivot
-        let filteredPivotRelation = pivot.relation.filter { db in
-            try pivot.condition.filteringExpression(db, leftRows: originRows(db))
+        // Filter the pivot with origin rows, so that we get
+        // `pivot.originId = 123` or `pivot.originId IN (1, 2, 3)`
+        let condition = pivot.condition
+        let associationFromOriginRows = map(\.pivot.relation) {
+            $0.filter { db in
+                try condition.expression(db, leftRows: originRows(db))
+            }
         }
-        
-        if steps.count == 1 {
-            // This is a direct join from origin to destination, without
-            // intermediate step.
-            //
-            // SELECT destination.*
-            // FROM destination
-            // WHERE destination.originId = 1
-            //
-            // let association = Origin.hasMany(Destination.self)
-            // Origin(id: 1).request(for: association)
-            return filteredPivotRelation
-        }
-        
-        // This is an indirect join from origin to destination, through
-        // some intermediate steps:
-        //
-        // SELECT destination.*
-        // FROM destination
-        // JOIN pivot ON (pivot.destinationId = destination.id) AND (pivot.originId = 1)
-        //
-        // let association = Origin.hasMany(
-        //     Destination.self,
-        //     through: Origin.hasMany(Pivot.self),
-        //     via: Pivot.belongsTo(Destination.self))
-        // Origin(id: 1).request(for: association)
-        let filteredSteps = steps.with(\.[0].relation, filteredPivotRelation)
-        let reversedSteps = zip(filteredSteps, filteredSteps.dropFirst())
+        return associationFromOriginRows.destinationRelation()
+    }
+    
+    private func destinationRelation() -> SQLRelation {
+        let reversedSteps = zip(steps, steps.dropFirst())
             .map({ (step, nextStep) -> SQLAssociationStep in
-                // Intermediate steps are not selected, and including(all:)
-                // children are useless:
+                // Intermediate steps are not selected, and all children that
+                // do not impact their parent are useless:
                 let relation = step.relation
-                    .selectOnly([])
-                    .filteringChildren({
-                         switch $0.kind {
-                         case .allPrefetched, .allNotPrefetched: return false
-                         case .oneRequired, .oneOptional: return true
-                         }
-                     })
+                    .filteringChildren(\.impactsParentDefinition)
+                    .select([])
+                    .droppingChildrenSelection()
                 
                 // Don't interfere with user-defined keys that could be added later
                 let key = step.key.map(\.baseName) { "grdb_\($0)" }
@@ -195,6 +153,11 @@ public /* TODO: internal */ struct SQLAssociation {
                     cardinality: .toOne)
             })
             .reversed()
+        
+        if reversedSteps.isEmpty {
+            return destination.relation
+        }
+        
         let reversedAssociation = SQLAssociation(steps: Array(reversedSteps))
         return destination.relation.appendingChild(for: reversedAssociation, kind: .oneRequired)
     }

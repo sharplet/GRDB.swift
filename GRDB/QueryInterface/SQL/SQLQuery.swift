@@ -106,7 +106,7 @@ extension SQLQuery {
             return trivialCountQuery
         }
         
-        if relation.children.contains(where: { $0.value.impactsParentCount }) { // TODO: not tested
+        if relation.children.contains(where: { $0.value.impactsParentDefinition }) { // TODO: not tested
             // SELECT ... FROM ... JOIN ...
             return trivialCountQuery
         }
