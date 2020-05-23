@@ -107,3 +107,8 @@
 - File protection: https://lists.apple.com/archives/cocoa-dev/2012/Aug/msg00527.html
 - [iOS apps are terminated every time they enter the background if they share an encrypted database with an app extension](https://github.com/sqlcipher/sqlcipher/issues/255)
 - [Cross-Process notifications with CFNotificationCenterGetDarwinNotifyCenter](https://www.avanderlee.com/swift/core-data-app-extension-data-sharing/)
+- Django aggregates:
+    - https://markusholtermann.eu/2019/03/less-obvious-things-to-do-with-djangos-orm/
+    - https://github.com/groue/GRDB.swift/commit/6142020
+    - https://github.com/groue/GRDB.swift/issues/611
+    
