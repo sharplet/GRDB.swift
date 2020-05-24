@@ -734,28 +734,54 @@ class AssociationAggregateTests: GRDBTestCase {
         }
     }
     
-    func testAnnotatedWithHasManyMultipleCount() throws {
+    func testAnnotatedWithHasManyMultipleAggregatesFromMultiplePopulations() throws {
+        // Here we test all aggregates but sum and average, which can not be computed.
         struct TeamInfo: Decodable, FetchableRecord {
             var team: Team
             var lowPlayerCount: Int
+            var hasNoLowPlayer: Bool
+            var minLowPlayerScore: Int?
+            var maxLowPlayerScore: Int?
             var highPlayerCount: Int
+            var hasNoHighPlayer: Bool
+            var minHighPlayerScore: Int?
+            var maxHighPlayerScore: Int?
         }
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.read { db in
+            let lowPlayers = Team.players.filter(Column("score") < 500).forKey("lowPlayers")
+            let highPlayers = Team.players.filter(Column("score") >= 500).forKey("highPlayers")
             let request = Team
-                .annotated(with: Team.players.filter(Column("score") < 500).forKey("lowPlayers").count)
-                .annotated(with: Team.players.filter(Column("score") >= 500).forKey("highPlayers").count)
+                .annotated(with: lowPlayers.count)
+                .annotated(with: lowPlayers.isEmpty)
+                .annotated(with: lowPlayers.min(Column("score")))
+                .annotated(with: lowPlayers.max(Column("score")))
+                .annotated(with: highPlayers.count)
+                .annotated(with: highPlayers.isEmpty)
+                .annotated(with: highPlayers.min(Column("score")))
+                .annotated(with: highPlayers.max(Column("score")))
                 .orderByPrimaryKey()
                 .asRequest(of: TeamInfo.self)
             
-            try assertEqualSQL(db, request, """
-                SELECT "team".*, \
-                COUNT(DISTINCT "player1"."id") AS "lowPlayerCount", \
-                COUNT(DISTINCT "player2"."id") AS "highPlayerCount" \
-                FROM "team" \
-                LEFT JOIN "player" "player1" ON ("player1"."teamId" = "team"."id") AND ("player1"."score" < 500) \
-                LEFT JOIN "player" "player2" ON ("player2"."teamId" = "team"."id") AND ("player2"."score" >= 500) \
-                GROUP BY "team"."id" \
+            try assertMatchSQL(db, request, """
+                SELECT
+                    "team".*,
+                    COUNT(DISTINCT "player1"."id") AS "lowPlayerCount",
+                    COUNT(DISTINCT "player1"."id") = 0 AS "hasNoLowPlayer",
+                    MIN("player1"."score") AS "minLowPlayerScore",
+                    MAX("player1"."score") AS "maxLowPlayerScore",
+                    COUNT(DISTINCT "player2"."id") AS "highPlayerCount",
+                    COUNT(DISTINCT "player2"."id") = 0 AS "hasNoHighPlayer",
+                    MIN("player2"."score") AS "minHighPlayerScore",
+                    MAX("player2"."score") AS "maxHighPlayerScore"
+                FROM "team"
+                LEFT JOIN "player" "player1"
+                    ON ("player1"."teamId" = "team"."id")
+                    AND ("player1"."score" < 500)
+                LEFT JOIN "player" "player2"
+                    ON ("player2"."teamId" = "team"."id")
+                    AND ("player2"."score" >= 500)
+                GROUP BY "team"."id"
                 ORDER BY "team"."id"
                 """)
             
@@ -765,22 +791,46 @@ class AssociationAggregateTests: GRDBTestCase {
             XCTAssertEqual(teamInfos[0].team.id, 1)
             XCTAssertEqual(teamInfos[0].team.name, "Reds")
             XCTAssertEqual(teamInfos[0].lowPlayerCount, 1)
+            XCTAssertEqual(teamInfos[0].hasNoLowPlayer, false)
+            XCTAssertEqual(teamInfos[0].minLowPlayerScore, 100)
+            XCTAssertEqual(teamInfos[0].maxLowPlayerScore, 100)
             XCTAssertEqual(teamInfos[0].highPlayerCount, 1)
+            XCTAssertEqual(teamInfos[0].hasNoHighPlayer, false)
+            XCTAssertEqual(teamInfos[0].minHighPlayerScore, 1000)
+            XCTAssertEqual(teamInfos[0].maxHighPlayerScore, 1000)
 
             XCTAssertEqual(teamInfos[1].team.id, 2)
             XCTAssertEqual(teamInfos[1].team.name, "Blues")
             XCTAssertEqual(teamInfos[1].lowPlayerCount, 1)
+            XCTAssertEqual(teamInfos[1].hasNoLowPlayer, false)
+            XCTAssertEqual(teamInfos[1].minLowPlayerScore, 200)
+            XCTAssertEqual(teamInfos[1].maxLowPlayerScore, 200)
             XCTAssertEqual(teamInfos[1].highPlayerCount, 2)
+            XCTAssertEqual(teamInfos[1].hasNoHighPlayer, false)
+            XCTAssertEqual(teamInfos[1].minHighPlayerScore, 500)
+            XCTAssertEqual(teamInfos[1].maxHighPlayerScore, 800)
 
             XCTAssertEqual(teamInfos[2].team.id, 3)
             XCTAssertEqual(teamInfos[2].team.name, "Greens")
             XCTAssertEqual(teamInfos[2].lowPlayerCount, 0)
+            XCTAssertEqual(teamInfos[2].hasNoLowPlayer, true)
+            XCTAssertNil(teamInfos[2].minLowPlayerScore)
+            XCTAssertNil(teamInfos[2].maxLowPlayerScore)
             XCTAssertEqual(teamInfos[2].highPlayerCount, 0)
+            XCTAssertEqual(teamInfos[2].hasNoHighPlayer, true)
+            XCTAssertNil(teamInfos[2].minHighPlayerScore)
+            XCTAssertNil(teamInfos[2].maxHighPlayerScore)
 
             XCTAssertEqual(teamInfos[3].team.id, 4)
             XCTAssertEqual(teamInfos[3].team.name, "Oranges")
             XCTAssertEqual(teamInfos[3].lowPlayerCount, 1)
+            XCTAssertEqual(teamInfos[3].hasNoLowPlayer, false)
+            XCTAssertEqual(teamInfos[3].minLowPlayerScore, 0)
+            XCTAssertEqual(teamInfos[3].maxLowPlayerScore, 0)
             XCTAssertEqual(teamInfos[3].highPlayerCount, 0)
+            XCTAssertEqual(teamInfos[3].hasNoHighPlayer, true)
+            XCTAssertNil(teamInfos[3].minHighPlayerScore)
+            XCTAssertNil(teamInfos[3].maxHighPlayerScore)
         }
     }
     
