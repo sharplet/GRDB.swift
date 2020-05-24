@@ -834,6 +834,97 @@ class AssociationAggregateTests: GRDBTestCase {
         }
     }
     
+    func testSumAndAverageWithExtraToOneJoin() throws {
+        // We test that the sum and average aggregates work even with other
+        // to-one joins.
+        struct TeamInfo: Decodable, FetchableRecord {
+            var team: Team
+            var toOneById: Team
+            var toOneByName: Team
+            var toOneByIdThroughName: Team?
+            var playerScoreSum: Int?
+            var averagePlayerScore: Double?
+        }
+        let dbQueue = try makeDatabaseQueue()
+        try dbQueue.read { db in
+            // Some to-one relationships (pretty artificial but we don't care)
+            let toOneById = Team.belongsTo(Team.self, key: "toOneById", using: ForeignKey(["id"]))
+            let toOneByName = Team.hasOne(Team.self, key: "toOneByName", using: ForeignKey(["name"], to: ["name"]))
+            
+            let request = Team
+                .annotated(with: Team.players.sum(Column("score")))
+                .annotated(with: Team.players.average(Column("score")))
+                .including(required: toOneById)
+                .including(required: toOneByName.including(optional: toOneById.forKey("toOneByIdThroughName")))
+                .orderByPrimaryKey()
+                .asRequest(of: TeamInfo.self)
+            
+            try assertMatchSQL(db, request, """
+                SELECT
+                    "team1".*,
+                    SUM("player"."score") AS "playerScoreSum",
+                    AVG("player"."score") AS "averagePlayerScore",
+                    "team2".*,
+                    "team3".*,
+                    "team4".*
+                FROM "team" "team1"
+                LEFT JOIN "player" ON "player"."teamId" = "team1"."id"
+                JOIN "team" "team2" ON "team2"."id" = "team1"."id"
+                JOIN "team" "team3" ON "team3"."name" = "team1"."name"
+                LEFT JOIN "team" "team4" ON "team4"."id" = "team3"."id"
+                GROUP BY "team1"."id"
+                ORDER BY "team1"."id"
+                """)
+            
+            let teamInfos = try request.fetchAll(db)
+            XCTAssertEqual(teamInfos.count, 4)
+            
+            XCTAssertEqual(teamInfos[0].team.id, 1)
+            XCTAssertEqual(teamInfos[0].team.name, "Reds")
+            XCTAssertEqual(teamInfos[0].toOneById.id, 1)
+            XCTAssertEqual(teamInfos[0].toOneById.name, "Reds")
+            XCTAssertEqual(teamInfos[0].toOneByName.id, 1)
+            XCTAssertEqual(teamInfos[0].toOneByName.name, "Reds")
+            XCTAssertEqual(teamInfos[0].toOneByIdThroughName?.id, 1)
+            XCTAssertEqual(teamInfos[0].toOneByIdThroughName?.name, "Reds")
+            XCTAssertEqual(teamInfos[0].playerScoreSum, 1100)
+            XCTAssertEqual(teamInfos[0].averagePlayerScore, 550)
+
+            XCTAssertEqual(teamInfos[1].team.id, 2)
+            XCTAssertEqual(teamInfos[1].team.name, "Blues")
+            XCTAssertEqual(teamInfos[1].toOneById.id, 2)
+            XCTAssertEqual(teamInfos[1].toOneById.name, "Blues")
+            XCTAssertEqual(teamInfos[1].toOneByName.id, 2)
+            XCTAssertEqual(teamInfos[1].toOneByName.name, "Blues")
+            XCTAssertEqual(teamInfos[1].toOneByIdThroughName?.id, 2)
+            XCTAssertEqual(teamInfos[1].toOneByIdThroughName?.name, "Blues")
+            XCTAssertEqual(teamInfos[1].playerScoreSum, 1500)
+            XCTAssertEqual(teamInfos[1].averagePlayerScore, 1500.0 / 3)
+
+            XCTAssertEqual(teamInfos[2].team.id, 3)
+            XCTAssertEqual(teamInfos[2].team.name, "Greens")
+            XCTAssertEqual(teamInfos[2].toOneById.id, 3)
+            XCTAssertEqual(teamInfos[2].toOneById.name, "Greens")
+            XCTAssertEqual(teamInfos[2].toOneByName.id, 3)
+            XCTAssertEqual(teamInfos[2].toOneByName.name, "Greens")
+            XCTAssertEqual(teamInfos[2].toOneByIdThroughName?.id, 3)
+            XCTAssertEqual(teamInfos[2].toOneByIdThroughName?.name, "Greens")
+            XCTAssertNil(teamInfos[2].playerScoreSum)
+            XCTAssertNil(teamInfos[2].averagePlayerScore)
+
+            XCTAssertEqual(teamInfos[3].team.id, 4)
+            XCTAssertEqual(teamInfos[3].team.name, "Oranges")
+            XCTAssertEqual(teamInfos[3].toOneById.id, 4)
+            XCTAssertEqual(teamInfos[3].toOneById.name, "Oranges")
+            XCTAssertEqual(teamInfos[3].toOneByName.id, 4)
+            XCTAssertEqual(teamInfos[3].toOneByName.name, "Oranges")
+            XCTAssertEqual(teamInfos[3].toOneByIdThroughName?.id, 4)
+            XCTAssertEqual(teamInfos[3].toOneByIdThroughName?.name, "Oranges")
+            XCTAssertEqual(teamInfos[3].playerScoreSum, 0)
+            XCTAssertEqual(teamInfos[3].averagePlayerScore, 0)
+        }
+    }
+    
     func testHasManyIsEmpty() throws {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.read { db in
