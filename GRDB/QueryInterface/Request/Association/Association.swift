@@ -60,8 +60,8 @@ extension Association {
     }
     
     /// :nodoc:
-    public func _joining(optional association: SQLAssociation) -> Self {
-        mapDestinationRelation { $0._joining(optional: association) }
+    public func _joining(optional association: SQLAssociation, forFragileAggregate fragile: Bool) -> Self {
+        mapDestinationRelation { $0._joining(optional: association, forFragileAggregate: fragile) }
     }
     
     /// :nodoc:

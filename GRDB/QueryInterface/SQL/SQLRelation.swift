@@ -101,14 +101,44 @@
 ///             .including(all: Country.citizens)
 struct SQLRelation {
     struct Child: Refinable {
-        enum Kind {
-            // Record.including(optional: association)
-            case oneOptional
-            // Record.including(required: association)
+        enum Kind: Equatable {
+            /// The kind of optional associations, implemented with a LEFT JOIN.
+            ///
+            /// For example:
+            ///
+            ///     Child.including(optional: parent)
+            ///     Child.joining(optional: parent)
+            ///     Parent.having(children.isEmpty)
+            ///     Parent.annotated(with: children.max(column))
+            ///     Parent.annotated(with: children.sum(column)) // fragile
+            ///
+            /// See `_JoinableRequest._joining(optional:forFragileAggregate:)`
+            /// for more information about `forFragileAggregate`.
+            case oneOptional(forFragileAggregate: Bool)
+            
+            /// The kind of required associations, implemented with an
+            /// INNER JOIN.
+            ///
+            /// For example:
+            ///
+            ///     Child.including(required: parent)
+            ///     Child.joining(required: parent)
             case oneRequired
-            // Record.including(all: association)
+            
+            /// The kind of eager-loaded associations, implemented with an extra
+            /// SQL query.
+            ///
+            /// For example:
+            ///
+            ///     Parent.including(all: children)
             case allPrefetched
-            // Record.including(all: associationThroughPivot)
+            
+            /// The kind of intermediate eager-loaded associations, which occur
+            /// when one eager-loads HasManyThrough associations.
+            ///
+            /// For example:
+            ///
+            ///     Parent.including(all: grandChildrenThroughChildren)
             case allNotPrefetched
             
             var isSingular: Bool {
@@ -262,15 +292,17 @@ extension SQLRelation: _JoinableRequest {
     }
     
     func _including(optional association: SQLAssociation) -> Self {
-        appendingChild(for: association, kind: .oneOptional)
+        appendingChild(for: association, kind: .oneOptional(forFragileAggregate: false))
     }
     
     func _including(required association: SQLAssociation) -> Self {
         appendingChild(for: association, kind: .oneRequired)
     }
     
-    func _joining(optional association: SQLAssociation) -> Self {
-        appendingChild(for: association.map(\.destination.relation, { $0.select([]) }), kind: .oneOptional)
+    func _joining(optional association: SQLAssociation, forFragileAggregate fragile: Bool) -> Self {
+        appendingChild(
+            for: association.map(\.destination.relation, { $0.select([]) }),
+            kind: .oneOptional(forFragileAggregate: fragile))
     }
     
     func _joining(required association: SQLAssociation) -> Self {
@@ -397,6 +429,7 @@ extension SQLRelation {
         } else {
             relation.children.appendValue(child, forKey: key)
         }
+        preconditionNoMoreThanOneFragileChild()
         return relation
     }
     
@@ -416,6 +449,19 @@ extension SQLRelation {
                         try relation.filteringChildren(isIncluded)
                     }
                 })
+        }
+    }
+    
+    private func preconditionNoMoreThanOneFragileChild() {
+        let keys: [String] = children.compactMap { (key, child) in
+            if child.kind == .oneOptional(forFragileAggregate: true) {
+                return key
+            } else {
+                return nil
+            }
+        }
+        if keys.count > 1 {
+            fatalError("Not implemented: computing `sum` or `average` aggregates on multiple distinct associations (keys: \(keys.joined(separator: ", ")))")
         }
     }
 }
@@ -763,12 +809,14 @@ extension SQLRelation {
         // replace ordering unless empty
         let mergedOrdering = other.ordering.isEmpty ? ordering : other.ordering
         
-        return SQLRelation(
+        let mergedRelation = SQLRelation(
             source: mergedSource,
             selectionPromise: mergedSelectionPromise,
             filtersPromise: mergedFiltersPromise,
             ordering: mergedOrdering,
             children: mergedChildren)
+        mergedRelation.preconditionNoMoreThanOneFragileChild()
+        return mergedRelation
     }
 }
 
@@ -839,13 +887,13 @@ extension SQLRelation.Child.Kind {
             //   .including(optional: association)
             return .oneRequired
             
-        case (.oneOptional, .oneOptional):
+        case let (.oneOptional(forFragileAggregate: lhs), .oneOptional(forFragileAggregate: rhs)):
             // Equivalent to Record.including(optional: association):
             //
             // Record
             //   .including(optional: association)
             //   .including(optional: association)
-            return .oneOptional
+            return .oneOptional(forFragileAggregate: lhs || rhs)
             
         case (.allPrefetched, .allPrefetched):
             // Equivalent to Record.including(all: association):

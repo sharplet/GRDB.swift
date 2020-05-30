@@ -532,7 +532,13 @@ public protocol _JoinableRequest {
     /// Creates a request that joins an association. The columns of the
     /// associated record are not selected. The returned request does not
     /// require that the associated database table contains a matching row.
-    func _joining(optional association: SQLAssociation) -> Self
+    ///
+    /// - parameter fragile: A "fragile" association is used to compute a
+    ///   "fragile" aggregate which can be miscalculated (sum and average).
+    ///   A fatal error is emitted when we can't make sure this aggregate is
+    ///   correctly computed (when a request is joined with more than one
+    ///   fragile association). See https://github.com/groue/GRDB.swift/issues/777.
+    func _joining(optional association: SQLAssociation, forFragileAggregate fragile: Bool) -> Self
     
     /// Creates a request that joins an association. The columns of the
     /// associated record are not selected. The returned request requires
@@ -585,9 +591,27 @@ extension JoinableRequest {
     /// associated record are not selected. The returned request does not
     /// require that the associated database table contains a matching row.
     public func joining<A: Association>(optional association: A) -> Self where A.OriginRowDecoder == RowDecoder {
-        _joining(optional: association.sqlAssociation)
+        joining(optional: association, forFragileAggregate: false)
     }
     
+    /// Creates a request that joins an association. The columns of the
+    /// associated record are not selected. The returned request does not
+    /// require that the associated database table contains a matching row.
+    ///
+    /// - parameter fragile: A "fragile" association is used to compute a
+    ///   "fragile" aggregate which can be miscalculated (sum and average).
+    ///   A fatal error is emitted when we can't make sure this aggregate is
+    ///   correctly computed (when a request is joined with more than one
+    ///   fragile association). See https://github.com/groue/GRDB.swift/issues/777.
+    func joining<A: Association>(
+        optional association: A,
+        forFragileAggregate fragile: Bool)
+        -> Self
+        where A.OriginRowDecoder == RowDecoder
+    {
+        _joining(optional: association.sqlAssociation, forFragileAggregate: fragile)
+    }
+
     /// Creates a request that joins an association. The columns of the
     /// associated record are not selected. The returned request requires
     /// that the associated database table contains a matching row.

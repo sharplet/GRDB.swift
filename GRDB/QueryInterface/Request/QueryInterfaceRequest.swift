@@ -279,8 +279,12 @@ extension QueryInterfaceRequest: _JoinableRequest {
     }
     
     /// :nodoc:
-    public func _joining(optional association: SQLAssociation) -> QueryInterfaceRequest {
-        map(\.query.relation) { $0._joining(optional: association) }
+    public func _joining(
+        optional association: SQLAssociation,
+        forFragileAggregate fragile: Bool)
+        -> QueryInterfaceRequest
+    {
+        map(\.query.relation) { $0._joining(optional: association, forFragileAggregate: fragile) }
     }
     
     /// :nodoc:

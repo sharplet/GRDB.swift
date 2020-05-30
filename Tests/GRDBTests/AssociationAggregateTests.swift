@@ -925,6 +925,38 @@ class AssociationAggregateTests: GRDBTestCase {
         }
     }
     
+    // https://github.com/groue/GRDB.swift/issues/777
+    func testIssue777() throws {
+        struct Task: Identifiable, TableRecord {
+            var id: UUID
+            var projectId: UUID?
+            var title: String
+            static let subtasks = hasMany(Task.self, key: "subtasks")
+            static let project = belongsTo(Task.self, key: "project")
+        }
+        
+        let dbQueue = try makeDatabaseQueue()
+        try dbQueue.write { db in
+            try db.create(table: "task") { t in
+                t.column("id", .text).primaryKey()
+                t.column("projectId", .text).references("task")
+                t.column("title", .text)
+                t.column("status", .integer)
+            }
+            
+            let request = Task
+                .all()
+                .including(optional: Task.project)
+                .annotated(with: Task.subtasks.count.forKey("totalSubtaskCount"))
+                .annotated(with: Task.subtasks.sum(Column("status") == 0).forKey("remainingSubtaskCount"))
+            try print(request.makePreparedRequest(db, forSingleResult: false).statement.sql)
+            _ = try Row.fetchAll(db, request)
+            for sql in sqlQueries {
+                print(sql)
+                }
+        }
+    }
+    
     func testHasManyIsEmpty() throws {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.read { db in

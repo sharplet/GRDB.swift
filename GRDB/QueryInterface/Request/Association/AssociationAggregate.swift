@@ -5,21 +5,31 @@ typealias AssociationAggregatePreparation<RowDecoder> =
     -> DatabasePromise<SQLExpression>
 
 extension AssociationToMany {
-    private func makeAggregate(_ expressionPromise: DatabasePromise<SQLExpression>)
+    /// - parameter fragile: A "fragile" aggregate can be miscalculated
+    ///   (sum and average). A fragile aggregate taints a request so that a
+    ///   fatal error is emitted when we can't make sure it is
+    ///   correctly computed. See https://github.com/groue/GRDB.swift/issues/777.
+    private func makeAggregate(fragile: Bool, expressionPromise: DatabasePromise<SQLExpression>)
         -> AssociationAggregate<OriginRowDecoder>
     {
         AssociationAggregate { request in
             let tableAlias = TableAlias()
+            #warning("TODO: use fragile")
             request = request
-                .joining(optional: self.aliased(tableAlias))
+                .joining(optional: self.aliased(tableAlias), forFragileAggregate: fragile)
                 .groupByPrimaryKey()
             return expressionPromise.map { tableAlias[$0] }
         }
     }
     
-    // Convenience
-    private func makeAggregate(_ expression: SQLExpression) -> AssociationAggregate<OriginRowDecoder> {
-        makeAggregate(DatabasePromise(value: expression))
+    /// - parameter fragile: A "fragile" aggregate can be miscalculated
+    ///   (sum and average). A fragile aggregate taints a request so that a
+    ///   fatal error is emitted when we can't make sure it is
+    ///   correctly computed. See https://github.com/groue/GRDB.swift/issues/777.
+    private func makeAggregate(fragile: Bool, expression: SQLExpression) -> AssociationAggregate<OriginRowDecoder> {
+        makeAggregate(
+            fragile: fragile,
+            expressionPromise: DatabasePromise(value: expression))
     }
     
     /// The number of associated records.
@@ -38,11 +48,14 @@ extension AssociationToMany {
     ///
     ///     let teams: [Team] = try Team.having(Team.players.count() > 10).fetchAll(db)
     public var count: AssociationAggregate<OriginRowDecoder> {
-        let expression = DatabasePromise<SQLExpression> { db in
+        let expressionPromise = DatabasePromise<SQLExpression> { db in
             let primaryKey = try db.primaryKeyExpression(self.databaseTableName)
             return SQLExpressionCountDistinct(primaryKey)
         }
-        return makeAggregate(expression).forKey("\(key.singularizedName)Count")
+        return makeAggregate(
+            fragile: false, // COUNT(DISTINCT child.id) is not fragile
+            expressionPromise: expressionPromise)
+            .forKey("\(key.singularizedName)Count")
     }
     
     /// Creates an aggregate that is true if there exists no associated records.
@@ -61,11 +74,14 @@ extension AssociationToMany {
     ///     let teams: [Team] = try Team.having(!Team.players.isEmpty())
     ///     let teams: [Team] = try Team.having(Team.players.isEmpty() == false)
     public var isEmpty: AssociationAggregate<OriginRowDecoder> {
-        let expression = DatabasePromise<SQLExpression> { db in
+        let expressionPromise = DatabasePromise<SQLExpression> { db in
             let primaryKey = try db.primaryKeyExpression(self.databaseTableName)
             return SQLExpressionIsEmpty(SQLExpressionCountDistinct(primaryKey))
         }
-        return makeAggregate(expression).forKey("hasNo\(key.singularizedName.uppercasingFirstCharacter)")
+        return makeAggregate(
+            fragile: false, // COUNT(DISTINCT child.id) is not fragile
+            expressionPromise: expressionPromise)
+            .forKey("hasNo\(key.singularizedName.uppercasingFirstCharacter)")
     }
     
     /// Creates an aggregate which evaluate to the average value of the given
@@ -86,7 +102,10 @@ extension AssociationToMany {
     ///
     ///     let teams: [Team] = try Team.having(Team.players.average(Column("score")) > 100).fetchAll(db)
     public func average(_ expression: SQLExpressible) -> AssociationAggregate<OriginRowDecoder> {
-        let aggregate = makeAggregate(SQLExpressionFunction(.avg, arguments: expression))
+        let aggregate = makeAggregate(
+            fragile: true, // AVG is fragile
+            expression: SQLExpressionFunction(.avg, arguments: expression)
+        )
         if let column = expression as? ColumnExpression {
             let name = key.singularizedName
             return aggregate.forKey("average\(name.uppercasingFirstCharacter)\(column.name.uppercasingFirstCharacter)")
@@ -113,7 +132,9 @@ extension AssociationToMany {
     ///
     ///     let teams: [Team] = try Team.having(Team.players.max(Column("score")) < 100).fetchAll(db)
     public func max(_ expression: SQLExpressible) -> AssociationAggregate<OriginRowDecoder> {
-        let aggregate = makeAggregate(SQLExpressionFunction(.max, arguments: expression))
+        let aggregate = makeAggregate(
+            fragile: false, // MAX is not fragile
+            expression: SQLExpressionFunction(.max, arguments: expression))
         if let column = expression as? ColumnExpression {
             let name = key.singularizedName
             return aggregate.forKey("max\(name.uppercasingFirstCharacter)\(column.name.uppercasingFirstCharacter)")
@@ -140,7 +161,9 @@ extension AssociationToMany {
     ///
     ///     let teams: [Team] = try Team.having(Team.players.min(Column("score")) > 100).fetchAll(db)
     public func min(_ expression: SQLExpressible) -> AssociationAggregate<OriginRowDecoder> {
-        let aggregate = makeAggregate(SQLExpressionFunction(.min, arguments: expression))
+        let aggregate = makeAggregate(
+            fragile: false, // MIN is not fragile
+            expression: SQLExpressionFunction(.min, arguments: expression))
         if let column = expression as? ColumnExpression {
             let name = key.singularizedName
             return aggregate.forKey("min\(name.uppercasingFirstCharacter)\(column.name.uppercasingFirstCharacter)")
@@ -167,7 +190,9 @@ extension AssociationToMany {
     ///
     ///     let teams: [Team] = try Team.having(Team.players.sum(Column("score")) > 100).fetchAll(db)
     public func sum(_ expression: SQLExpressible) -> AssociationAggregate<OriginRowDecoder> {
-        let aggregate = makeAggregate(SQLExpressionFunction(.sum, arguments: expression))
+        let aggregate = makeAggregate(
+            fragile: true, // SUM is fragile
+            expression: SQLExpressionFunction(.sum, arguments: expression))
         if let column = expression as? ColumnExpression {
             let name = key.singularizedName
             return aggregate.forKey("\(name)\(column.name.uppercasingFirstCharacter)Sum")
