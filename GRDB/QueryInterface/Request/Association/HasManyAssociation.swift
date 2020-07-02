@@ -99,4 +99,21 @@ public struct HasManyAssociation<Origin: TableRecord, Destination: TableRecord>:
             relation: Destination.relationForAll,
             cardinality: .toMany)
     }
+    
+    init(
+        key: String,
+        join: @escaping (_ left: TableAlias, _ right: TableAlias) -> SQLExpressible)
+    {
+        let condition = SQLAssociationCondition.join(
+            identifier: key,
+            expression: join)
+        
+        let associationKey = SQLAssociationKey.fixedPlural(key)
+        
+        _sqlAssociation = _SQLAssociation(
+            key: associationKey,
+            condition: condition,
+            relation: Destination.relationForAll,
+            cardinality: .toMany)
+    }
 }

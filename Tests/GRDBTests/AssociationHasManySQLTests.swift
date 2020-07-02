@@ -3,7 +3,9 @@ import GRDB
 
 /// Test SQL generation
 class AssociationHasManySQLTests: GRDBTestCase {
-
+    
+    // MARK: - Foreign Keys
+    
     func testSingleColumnNoForeignKeyNoPrimaryKey() throws {
         struct Child : TableRecord {
             static let databaseTableName = "children"
@@ -829,6 +831,59 @@ class AssociationHasManySQLTests: GRDBTestCase {
                     JOIN "parent" ON "parent"."id" = "child"."parentId" \
                     WHERE "child"."parentId" = 1
                     """)
+            }
+        }
+    }
+    
+    // MARK: - Join
+    
+    func testJoin() throws {
+        struct Child : TableRecord {
+        }
+        
+        struct Parent : TableRecord, EncodableRecord {
+            func encode(to container: inout PersistenceContainer) {
+                container["id"] = 1
+                container["rowid"] = 2
+            }
+        }
+        
+        let dbQueue = try makeDatabaseQueue()
+        try dbQueue.inDatabase { db in
+            try db.create(table: "parent") { t in
+                t.column("id", .integer)
+            }
+            try db.create(table: "child") { t in
+                t.column("parentId", .integer)
+            }
+        }
+        
+        try dbQueue.inDatabase { db in
+            do {
+                let association = Parent.hasMany(Child.self, key: "children", join: { parent, child in
+                    parent["id"] == child["parentId"]
+                })
+                try assertEqualSQL(db, Parent.all().including(required: association), """
+                    SELECT "parent".*, "child".* \
+                    FROM "parent" \
+                    JOIN "child" ON "parent"."id" = "child"."parentId"
+                    """)
+                try assertEqualSQL(db, Parent.all().including(optional: association), """
+                    SELECT "parent".*, "child".* \
+                    FROM "parent" \
+                    LEFT JOIN "child" ON "parent"."id" = "child"."parentId"
+                    """)
+                try assertEqualSQL(db, Parent.all().joining(required: association), """
+                    SELECT "parent".* \
+                    FROM "parent" \
+                    JOIN "child" ON "parent"."id" = "child"."parentId"
+                    """)
+                try assertEqualSQL(db, Parent.all().joining(optional: association), """
+                    SELECT "parent".* \
+                    FROM "parent" \
+                    LEFT JOIN "child" ON "parent"."id" = "child"."parentId"
+                    """)
+                try assertEqualSQL(db, Parent().request(for: association), "SELECT * FROM \"child\" WHERE \"parentId\" = 2")
             }
         }
     }

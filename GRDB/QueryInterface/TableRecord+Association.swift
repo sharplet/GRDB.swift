@@ -129,6 +129,16 @@ extension TableRecord {
         HasManyAssociation(key: key, using: foreignKey)
     }
     
+    // TODO: doc
+    public static func hasMany<Destination>(
+        _ destination: Destination.Type,
+        key: String,
+        join: @escaping (_ left: TableAlias, _ right: TableAlias) -> SQLExpressible)
+        -> HasManyAssociation<Self, Destination>
+    {
+        HasManyAssociation(key: key, join: join)
+    }
+
     /// Creates a "Has Many Through" association between Self and the
     /// destination type.
     ///
@@ -501,6 +511,10 @@ extension TableRecord where Self: EncodableRecord {
                 })
                 .destinationRelation()
             return QueryInterfaceRequest(relation: destinationRelation)
+            
+        case .join:
+            #warning("TODO")
+            fatalError("Not implemented")
         }
     }
 }

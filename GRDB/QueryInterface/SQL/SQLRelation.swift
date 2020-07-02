@@ -545,10 +545,26 @@ enum SQLAssociationCondition: Equatable {
     ///     SELECT ... FROM author JOIN book ON author.id = book.authorId
     case foreignKey(request: SQLForeignKeyRequest, originIsLeft: Bool)
     
+    // TODO: doc
+    case join(identifier: String, expression: (_ left: TableAlias, _ right: TableAlias) -> SQLExpressible)
+    
     var reversed: SQLAssociationCondition {
         switch self {
         case let .foreignKey(request: request, originIsLeft: originIsLeft):
             return .foreignKey(request: request, originIsLeft: !originIsLeft)
+        case let .join(identifier: identifier, expression: expression):
+            return .join(identifier: identifier, expression: { expression($1, $0) })
+        }
+    }
+    
+    static func == (lhs: SQLAssociationCondition, rhs: SQLAssociationCondition) -> Bool {
+        switch (lhs, rhs) {
+        case let (.foreignKey(request: lRequest, originIsLeft: lOrigin), .foreignKey(request: rRequest, originIsLeft: rOrigin)):
+            return lRequest == rRequest && lOrigin == rOrigin
+        case let (.join(identifier: lIdentifier, expression: _), .join(identifier: rIdentifier, expression: _)):
+            return lIdentifier == rIdentifier
+        default:
+            return false
         }
     }
 }

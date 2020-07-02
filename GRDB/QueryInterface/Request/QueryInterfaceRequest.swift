@@ -525,6 +525,10 @@ private func prefetch(_ db: Database, associations: [_SQLAssociation], in rows: 
             // now that grouping has been done?
             
             groupingIndexes = firstRow.indexes(forColumns: pivotMapping.map(\.left))
+            
+        case .join:
+            #warning("TODO")
+            fatalError("Not implemented")
         }
         
         for row in rows {
@@ -565,6 +569,10 @@ func prefetchedRegion(_ db: Database, associations: [_SQLAssociation]) throws ->
             prefetchedRegion = try SQLQueryGenerator(query: prefetchedQuery)
                 .makeSelectStatement(db)
                 .databaseRegion // contains region of nested associations
+            
+        case .join:
+            #warning("TODO")
+            fatalError("Not implemented")
         }
         region.formUnion(prefetchedRegion)
     }

@@ -790,6 +790,10 @@ private struct SQLQualifiedJoin: Refinable {
                 .fetchForeignKeyMapping(context.db)
                 .joinMapping(originIsLeft: originIsLeft)
                 .joinExpressions(leftAlias: leftAlias)
+                
+        case let .join(identifier: _, expression: expression):
+            // (_ left: TableAlias, _ right: TableAlias)
+            joinExpressions = [expression(leftAlias, rightAlias).sqlExpression]
         }
         joinExpressions += try relation.filtersPromise.resolve(context.db)
         if joinExpressions.isEmpty == false {
