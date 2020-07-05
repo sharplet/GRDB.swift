@@ -1568,4 +1568,93 @@ class AssociationPrefetchingSQLTests: GRDBTestCase {
             }
         }
     }
+    
+    func testJoin() throws {
+        let dbQueue = try makeDatabaseQueue()
+        try dbQueue.read { db in
+            let association = A.hasMany(B.self, key: "bs", join: { a, b in
+                b["colb2"] > a["cola1"]
+            })
+            
+            // Plain request
+            do {
+                let request = A
+                    .including(all: association
+                        .orderByPrimaryKey())
+                    .orderByPrimaryKey()
+                
+                sqlQueries.removeAll()
+                _ = try Row.fetchAll(db, request)
+                
+                let selectQueries = sqlQueries.filter { $0.contains("SELECT") && !$0.contains("sqlite_") }
+                XCTAssertEqual(selectQueries, [
+                    """
+                    SELECT * FROM "a" ORDER BY "cola1"
+                    """,
+                    """
+                    SELECT "b".*, "a"."cola1" AS "grdb_cola1" \
+                    FROM "b" \
+                    JOIN "a" ON "a"."cola1" IN (1, 2, 3) \
+                    WHERE "b"."colb2" > "a"."cola1" \
+                    ORDER BY "b"."colb1"
+                    """])
+            }
+            
+            // Request with avoided prefetch
+            do {
+                let request = A
+                    .filter(false)
+                    .including(all: association
+                        .orderByPrimaryKey())
+                    .orderByPrimaryKey()
+                
+                sqlQueries.removeAll()
+                _ = try Row.fetchAll(db, request)
+                
+                let selectQueries = sqlQueries.filter { $0.contains("SELECT") && !$0.contains("sqlite_") }
+                XCTAssertEqual(selectQueries, [
+                    """
+                    SELECT * FROM \"a\" WHERE 0 ORDER BY \"cola1\"
+                    """])
+            }
+            
+            // Request with filters
+            do {
+                let request = A
+                    .filter(Column("cola1") != 3)
+                    .including(all: association
+                        .filter(Column("colb1") == 4)
+                        .orderByPrimaryKey()
+                        .forKey("bs1"))
+                    .including(all: association
+                        .filter(Column("colb1") != 4)
+                        .orderByPrimaryKey()
+                        .forKey("bs2"))
+                    .orderByPrimaryKey()
+                
+                sqlQueries.removeAll()
+                _ = try Row.fetchAll(db, request)
+                
+                let selectQueries = sqlQueries.filter { $0.contains("SELECT") && !$0.contains("sqlite_") }
+                XCTAssertEqual(selectQueries, [
+                    """
+                    SELECT * FROM "a" \
+                    WHERE "cola1" <> 3 \
+                    ORDER BY "cola1"
+                    """,
+                    """
+                    SELECT *, "colb2" AS "grdb_colb2" \
+                    FROM "b" \
+                    WHERE ("colb1" = 4) AND ("colb2" IN (1, 2)) \
+                    ORDER BY "colb1"
+                    """,
+                    """
+                    SELECT *, "colb2" AS "grdb_colb2" \
+                    FROM "b" \
+                    WHERE ("colb1" <> 4) AND ("colb2" IN (1, 2)) \
+                    ORDER BY "colb1"
+                    """])
+            }
+        }
+    }
 }

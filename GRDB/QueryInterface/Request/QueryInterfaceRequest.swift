@@ -72,8 +72,8 @@ extension QueryInterfaceRequest: FetchRequest {
             return preparedRequest
         } else {
             // Eager loading of prefetched associations
-            return preparedRequest.with(\.supplementaryFetch) { rows in
-                try prefetch(db, associations: associations, in: rows)
+            return preparedRequest.with(\.supplementaryFetch) { [query] rows in
+                try prefetch(db, originSource: query.relation.source, associations: associations, in: rows)
             }
         }
     }
@@ -467,7 +467,7 @@ extension QueryInterfaceRequest where RowDecoder: MutablePersistableRecord {
 // MARK: - Eager loading of hasMany associations
 
 /// Append rows from prefetched associations into the argument rows.
-private func prefetch(_ db: Database, associations: [_SQLAssociation], in rows: [Row]) throws {
+private func prefetch(_ db: Database, originSource: SQLSource, associations: [_SQLAssociation], in rows: [Row]) throws {
     guard let firstRow = rows.first else {
         // No rows -> no prefetch
         return
@@ -475,9 +475,6 @@ private func prefetch(_ db: Database, associations: [_SQLAssociation], in rows: 
     
     // CAUTION: Keep this code in sync with prefetchedRegion(_:_:)
     for association in associations {
-        let prefetchedGroups: [[DatabaseValue] : [Row]]
-        let groupingIndexes: [Int]
-        
         switch association.pivot.condition {
         case let .foreignKey(request: foreignKeyRequest, originIsLeft: originIsLeft):
             // Annotate prefetched rows with pivot columns, so that we can
@@ -516,31 +513,120 @@ private func prefetch(_ db: Database, associations: [_SQLAssociation], in rows: 
                 })
                 .destinationRelation()
                 // Annotate with the pivot columns that allow grouping
-                .annotated(with: pivotColumns.map { pivotAlias[Column($0)].forKey("grdb_\($0)") })
+                .annotated(with: pivotColumns.map { pivotAlias[$0].forKey("grdb_\($0)") })
             
-            prefetchedGroups = try QueryInterfaceRequest<Row>(relation: prefetchedRelation)
+            let prefetchedGroups = try QueryInterfaceRequest<Row>(relation: prefetchedRelation)
                 .fetchAll(db)
                 .grouped(byDatabaseValuesOnColumns: pivotColumns.map { "grdb_\($0)" })
             // TODO: can we remove those grdb_ columns from user's sight,
             // now that grouping has been done?
             
-            groupingIndexes = firstRow.indexes(forColumns: pivotMapping.map(\.left))
+            let groupingIndexes = firstRow.indexes(forColumns: pivotMapping.map(\.left))
             
-        case .join:
-            #warning("TODO")
-            fatalError("Not implemented")
-        }
-        
-        for row in rows {
-            let groupingKey = groupingIndexes.map { row.impl.databaseValue(atUncheckedIndex: $0) }
-            let prefetchedRows = prefetchedGroups[groupingKey, default: []]
-            row.prefetchedRows.setRows(prefetchedRows, forKeyPath: association.keyPath)
+            for row in rows {
+                let groupingKey = groupingIndexes.map { row.impl.databaseValue(atUncheckedIndex: $0) }
+                let prefetchedRows = prefetchedGroups[groupingKey, default: []]
+                row.prefetchedRows.setRows(prefetchedRows, forKeyPath: association.keyPath)
+            }
+            
+        case let .join(identifier: _, expression: expression):
+            let originAlias = TableAlias()
+            let pivotAlias = TableAlias()
+            let pivotFilter = expression(originAlias, pivotAlias)
+            
+            if pivotFilter.isTrivialTrue {
+                // Full join
+                let prefetchedRelation = association.destinationRelation()
+                let prefetchedRows = try QueryInterfaceRequest<Row>(relation: prefetchedRelation)
+                    .fetchAll(db)
+                for row in rows {
+                    row.prefetchedRows.setRows(prefetchedRows, forKeyPath: association.keyPath)
+                }
+            } else {
+                guard case let .table(tableName: originTableName, alias: _) = originSource else {
+                    fatalError("Not implemented: prefetching from something which is not a table.")
+                }
+                let primaryKey = try db.primaryKey(originTableName)
+                let originAssociationStep = SQLAssociationStep(
+                    key: SQLAssociationKey.fixed("grdb_origin"),
+                    condition: .join(identifier: "grdb_origin", expression: { left, right in
+                        let mappings: [(column: String, index: Row.ColumnIndex)] = primaryKey.columns.map { column in
+                            guard let index = firstRow.index(forColumn: column) else {
+                                fatalError("Missing column: \(column)")
+                            }
+                            return (column: column, index: index)
+                        }
+                        if mappings.count == 1 {
+                            let mapping = mappings[0]
+                            
+                            // Unique database values and filter out NULL:
+                            var dbValues = Set(rows.map { $0.databaseValue(at: mapping.index) })
+                            dbValues.remove(.null)
+                            
+                            if dbValues.isEmpty {
+                                // null was removed from dbValues
+                                return right[mapping.column] == nil
+                            } else {
+                                // table.a IN (1, 2, 3, ...)
+                                // Sort database values for nicer output.
+                                return dbValues.sorted(by: <).contains(right[mapping.column])
+                            }
+                        } else {
+                            // Join on a multiple columns.
+                            // ((table.a = 1) AND (table.b = 2)) OR ((table.a = 3) AND (table.b = 4)) ...
+                            return rows
+                                .map({ row in
+                                    // (table.a = 1) AND (table.b = 2)
+                                    mappings
+                                        .map({ mapping -> SQLExpression in
+                                            right[mapping.column] == row.databaseValue(at: mapping.index)
+                                        })
+                                        .joined(operator: .and)
+                                })
+                                .joined(operator: .or)
+                        }
+                    }),
+                    relation: SQLRelation(source: .table(tableName: originTableName, alias: nil))
+                        .qualified(with: originAlias)
+                        .select([]),
+                    cardinality: .toOne)
+                let originAssociation = _SQLAssociation(steps: [originAssociationStep])
+                let prefetchedRelation = association
+                    .map(\.pivot.relation, { pivotRelation in
+                        pivotRelation
+                            .qualified(with: pivotAlias)
+                            .filter { _ in pivotFilter }
+                            .appendingChild(for: originAssociation, kind: .oneRequired)
+                    })
+                    .destinationRelation()
+                    // Annotate with the pivot columns that allow grouping
+                    .annotated(with: primaryKey.columns.map { originAlias[$0].forKey("grdb_\($0)") })
+                
+                let prefetchedGroups = try QueryInterfaceRequest<Row>(relation: prefetchedRelation)
+                    .fetchAll(db)
+                    .grouped(byDatabaseValuesOnColumns: primaryKey.columns.map { "grdb_\($0)" })
+                // TODO: can we remove those grdb_ columns from user's sight,
+                // now that grouping has been done?
+                
+                let groupingIndexes = firstRow.indexes(forColumns: primaryKey.columns)
+                
+                for row in rows {
+                    let groupingKey = groupingIndexes.map { row.impl.databaseValue(atUncheckedIndex: $0) }
+                    let prefetchedRows = prefetchedGroups[groupingKey, default: []]
+                    row.prefetchedRows.setRows(prefetchedRows, forKeyPath: association.keyPath)
+                }
+            }
         }
     }
 }
 
 // Returns the region of prefetched associations
-func prefetchedRegion(_ db: Database, associations: [_SQLAssociation]) throws -> DatabaseRegion {
+func prefetchedRegion(
+    _ db: Database,
+    originTableName: String?,
+    associations: [_SQLAssociation])
+    throws -> DatabaseRegion
+{
     try associations.reduce(into: DatabaseRegion()) { (region, association) in
         // CAUTION: Keep this code in sync with prefetch(_:associations:in:)
         let prefetchedRegion: DatabaseRegion
@@ -565,14 +651,52 @@ func prefetchedRegion(_ db: Database, associations: [_SQLAssociation]) throws ->
             
             let prefetchedQuery = SQLQuery(relation: prefetchedRelation)
             
-            // Union prefetched region
             prefetchedRegion = try SQLQueryGenerator(query: prefetchedQuery)
                 .makeSelectStatement(db)
                 .databaseRegion // contains region of nested associations
             
-        case .join:
-            #warning("TODO")
-            fatalError("Not implemented")
+        case let .join(identifier: _, expression: expression):
+            let originAlias = TableAlias()
+            let pivotAlias = TableAlias()
+            let pivotFilter = expression(originAlias, pivotAlias)
+            
+            if pivotFilter.isTrivialTrue {
+                // Full join
+                let prefetchedRelation = association.destinationRelation()
+                let prefetchedQuery = SQLQuery(relation: prefetchedRelation)
+                prefetchedRegion = try SQLQueryGenerator(query: prefetchedQuery)
+                    .makeSelectStatement(db)
+                    .databaseRegion // contains region of nested associations
+            } else {
+                guard let originTableName = originTableName else {
+                    fatalError("Not implemented: prefetching from something which is not a table.")
+                }
+                let primaryKey = try db.primaryKey(originTableName)
+                let originAssociationStep = SQLAssociationStep(
+                    key: SQLAssociationKey.fixed("grdb_origin"),
+                    condition: .join(identifier: "grdb_origin", expression: { _, right in
+                        primaryKey.columns.map { right[$0] == nil }.joined(operator: .and)
+                    }),
+                    relation: SQLRelation(source: .table(tableName: originTableName, alias: nil))
+                        .qualified(with: originAlias)
+                        .select([]),
+                    cardinality: .toOne)
+                let originAssociation = _SQLAssociation(steps: [originAssociationStep])
+                let prefetchedRelation = association
+                    .map(\.pivot.relation, { pivotRelation in
+                        pivotRelation
+                            .qualified(with: pivotAlias)
+                            .filter { _ in pivotFilter }
+                            .appendingChild(for: originAssociation, kind: .oneRequired)
+                    })
+                    .destinationRelation()
+                
+                let prefetchedQuery = SQLQuery(relation: prefetchedRelation)
+                
+                prefetchedRegion = try SQLQueryGenerator(query: prefetchedQuery)
+                    .makeSelectStatement(db)
+                    .databaseRegion // contains region of nested associations
+            }
         }
         region.formUnion(prefetchedRegion)
     }

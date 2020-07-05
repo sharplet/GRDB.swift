@@ -166,7 +166,9 @@ struct SQLQueryGenerator: Refinable {
         // parents, but won't attempt to select any children if there is no
         // parent in the database. And yet we need to observe the table for
         // children. This is why we include the prefetched region.
-        try statement.databaseRegion.formUnion(prefetchedRegion(db, associations: prefetchedAssociations))
+        try statement.databaseRegion.formUnion(prefetchedRegion(
+            db, originTableName: relation.source.alias?.tableName,
+            associations: prefetchedAssociations))
         
         return statement
     }
@@ -793,7 +795,7 @@ private struct SQLQualifiedJoin: Refinable {
                 .joinExpressions(leftAlias: leftAlias)
                 
         case let .join(identifier: _, expression: expression):
-            joinExpressions = [expression(leftAlias, rightAlias).sqlExpression]
+            joinExpressions = [expression(leftAlias, rightAlias)]
         }
         
         joinExpressions += try relation.filtersPromise.resolve(context.db)

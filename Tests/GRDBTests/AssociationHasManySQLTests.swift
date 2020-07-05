@@ -945,4 +945,52 @@ class AssociationHasManySQLTests: GRDBTestCase {
             }
         }
     }
+    
+    func testFullJoin() throws {
+        struct Child : TableRecord {
+        }
+        
+        struct Parent : TableRecord, EncodableRecord {
+            func encode(to container: inout PersistenceContainer) {
+                container["id"] = 1
+            }
+        }
+        
+        let dbQueue = try makeDatabaseQueue()
+        try dbQueue.inDatabase { db in
+            try db.create(table: "parent") { t in
+                t.column("id", .integer)
+            }
+            try db.create(table: "child") { t in
+                t.column("parentId", .integer)
+            }
+        }
+        
+        try dbQueue.inDatabase { db in
+            do {
+                let association = Parent.hasMany(Child.self, key: "children", join: { _, _ in true })
+                try assertEqualSQL(db, Parent.all().including(required: association), """
+                    SELECT "parent".*, "child".* \
+                    FROM "parent" \
+                    JOIN "child"
+                    """)
+                try assertEqualSQL(db, Parent.all().including(optional: association), """
+                    SELECT "parent".*, "child".* \
+                    FROM "parent" \
+                    LEFT JOIN "child"
+                    """)
+                try assertEqualSQL(db, Parent.all().joining(required: association), """
+                    SELECT "parent".* \
+                    FROM "parent" \
+                    JOIN "child"
+                    """)
+                try assertEqualSQL(db, Parent.all().joining(optional: association), """
+                    SELECT "parent".* \
+                    FROM "parent" \
+                    LEFT JOIN "child"
+                    """)
+                try assertEqualSQL(db, Parent().request(for: association), "SELECT * FROM \"child\"")
+            }
+        }
+    }
 }

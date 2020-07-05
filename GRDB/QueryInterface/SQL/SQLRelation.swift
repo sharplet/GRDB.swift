@@ -546,7 +546,7 @@ enum SQLAssociationCondition: Equatable {
     case foreignKey(request: SQLForeignKeyRequest, originIsLeft: Bool)
     
     // TODO: doc
-    case join(identifier: String, expression: (_ left: TableAlias, _ right: TableAlias) -> SQLExpressible)
+    case join(identifier: String, expression: (_ left: TableAlias, _ right: TableAlias) -> SQLExpression)
     
     var reversed: SQLAssociationCondition {
         switch self {

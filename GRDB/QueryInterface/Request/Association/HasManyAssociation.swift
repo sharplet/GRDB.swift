@@ -106,7 +106,7 @@ public struct HasManyAssociation<Origin: TableRecord, Destination: TableRecord>:
     {
         let condition = SQLAssociationCondition.join(
             identifier: key,
-            expression: join)
+            expression: { join($0, $1).sqlExpression })
         
         let associationKey = SQLAssociationKey.fixedPlural(key)
         

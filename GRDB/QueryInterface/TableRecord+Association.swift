@@ -513,9 +513,9 @@ extension TableRecord where Self: EncodableRecord {
             return QueryInterfaceRequest(relation: destinationRelation)
             
         case let .join(identifier: _, expression: expression):
-            let leftAlias = TableAlias()
+            let originAlias = TableAlias()
             let pivotAlias = TableAlias()
-            let filter = expression(leftAlias, pivotAlias).sqlExpression
+            let filter = expression(originAlias, pivotAlias)
             if filter.isTrivialTrue {
                 let destinationRelation = association._sqlAssociation.destinationRelation()
                 return QueryInterfaceRequest(relation: destinationRelation)
@@ -527,7 +527,7 @@ extension TableRecord where Self: EncodableRecord {
                             .qualified(with: pivotAlias)
                             .filter { db in
                                 // Filter the pivot on self
-                                try filter.resolved(db, with: PersistenceContainer(db, self), for: leftAlias)
+                                try filter.resolved(db, with: PersistenceContainer(db, self), for: originAlias)
                         }
                     })
                     .destinationRelation()
