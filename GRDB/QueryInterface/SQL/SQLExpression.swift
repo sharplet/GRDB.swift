@@ -49,6 +49,15 @@ extension SQLExpression {
     public func _qualifiedOrdering(with alias: TableAlias) -> SQLOrderingTerm {
         _qualifiedExpression(with: alias)
     }
+    
+    /// Returns true iff expression is the trivial true value
+    var isTrivialTrue: Bool {
+        if let dbValue = self as? DatabaseValue, dbValue == true.databaseValue {
+            return true
+        } else {
+            return false
+        }
+    }
 }
 
 // SQLExpression: SQLExpressible

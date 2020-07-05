@@ -784,6 +784,7 @@ private struct SQLQualifiedJoin: Refinable {
         
         // ... ON <join conditions> AND <other filters>
         var joinExpressions: [SQLExpression]
+        
         switch condition {
         case let .foreignKey(request: foreignKeyRequest, originIsLeft: originIsLeft):
             joinExpressions = try foreignKeyRequest
@@ -792,10 +793,12 @@ private struct SQLQualifiedJoin: Refinable {
                 .joinExpressions(leftAlias: leftAlias)
                 
         case let .join(identifier: _, expression: expression):
-            // (_ left: TableAlias, _ right: TableAlias)
             joinExpressions = [expression(leftAlias, rightAlias).sqlExpression]
         }
+        
         joinExpressions += try relation.filtersPromise.resolve(context.db)
+        joinExpressions.removeAll(where: \.isTrivialTrue)
+        
         if joinExpressions.isEmpty == false {
             let joiningSQL = try joinExpressions
                 .joined(operator: .and)

@@ -844,7 +844,6 @@ class AssociationHasManySQLTests: GRDBTestCase {
         struct Parent : TableRecord, EncodableRecord {
             func encode(to container: inout PersistenceContainer) {
                 container["id"] = 1
-                container["rowid"] = 2
             }
         }
         
@@ -859,31 +858,90 @@ class AssociationHasManySQLTests: GRDBTestCase {
         }
         
         try dbQueue.inDatabase { db in
+            // Test complex joining expression
             do {
                 let association = Parent.hasMany(Child.self, key: "children", join: { parent, child in
-                    parent["id"] == child["parentId"]
+                    child["parentId"] > parent["id"] + 1
                 })
                 try assertEqualSQL(db, Parent.all().including(required: association), """
                     SELECT "parent".*, "child".* \
                     FROM "parent" \
-                    JOIN "child" ON "parent"."id" = "child"."parentId"
+                    JOIN "child" ON "child"."parentId" > ("parent"."id" + 1)
                     """)
                 try assertEqualSQL(db, Parent.all().including(optional: association), """
                     SELECT "parent".*, "child".* \
                     FROM "parent" \
-                    LEFT JOIN "child" ON "parent"."id" = "child"."parentId"
+                    LEFT JOIN "child" ON "child"."parentId" > ("parent"."id" + 1)
                     """)
                 try assertEqualSQL(db, Parent.all().joining(required: association), """
                     SELECT "parent".* \
                     FROM "parent" \
-                    JOIN "child" ON "parent"."id" = "child"."parentId"
+                    JOIN "child" ON "child"."parentId" > ("parent"."id" + 1)
                     """)
                 try assertEqualSQL(db, Parent.all().joining(optional: association), """
                     SELECT "parent".* \
                     FROM "parent" \
-                    LEFT JOIN "child" ON "parent"."id" = "child"."parentId"
+                    LEFT JOIN "child" ON "child"."parentId" > ("parent"."id" + 1)
                     """)
-                try assertEqualSQL(db, Parent().request(for: association), "SELECT * FROM \"child\" WHERE 1 = \"parentId\"")
+                try assertEqualSQL(db, Parent().request(for: association), "SELECT * FROM \"child\" WHERE \"parentId\" > (1 + 1)")
+            }
+            
+            do {
+                // Test literal joining expression
+                func square(_ value: SQLExpressible) -> SQLExpression {
+                    SQLLiteral("(\(value) * \(value))").sqlExpression
+                }
+                
+                let association = Parent.hasMany(Child.self, key: "children", join: { parent, child in
+                    child["parentId"] > square(parent["id"])
+                })
+                try assertEqualSQL(db, Parent.all().including(required: association), """
+                    SELECT "parent".*, "child".* \
+                    FROM "parent" \
+                    JOIN "child" ON "child"."parentId" > (("parent"."id" * "parent"."id"))
+                    """)
+                try assertEqualSQL(db, Parent.all().including(optional: association), """
+                    SELECT "parent".*, "child".* \
+                    FROM "parent" \
+                    LEFT JOIN "child" ON "child"."parentId" > (("parent"."id" * "parent"."id"))
+                    """)
+                try assertEqualSQL(db, Parent.all().joining(required: association), """
+                    SELECT "parent".* \
+                    FROM "parent" \
+                    JOIN "child" ON "child"."parentId" > (("parent"."id" * "parent"."id"))
+                    """)
+                try assertEqualSQL(db, Parent.all().joining(optional: association), """
+                    SELECT "parent".* \
+                    FROM "parent" \
+                    LEFT JOIN "child" ON "child"."parentId" > (("parent"."id" * "parent"."id"))
+                    """)
+                try assertEqualSQL(db, Parent().request(for: association), "SELECT * FROM \"child\" WHERE \"parentId\" > ((1 * 1))")
+            }
+            
+            do {
+                // Test full join
+                let association = Parent.hasMany(Child.self, key: "children", join: { _, _ in true })
+                try assertEqualSQL(db, Parent.all().including(required: association), """
+                    SELECT "parent".*, "child".* \
+                    FROM "parent" \
+                    JOIN "child"
+                    """)
+                try assertEqualSQL(db, Parent.all().including(optional: association), """
+                    SELECT "parent".*, "child".* \
+                    FROM "parent" \
+                    LEFT JOIN "child"
+                    """)
+                try assertEqualSQL(db, Parent.all().joining(required: association), """
+                    SELECT "parent".* \
+                    FROM "parent" \
+                    JOIN "child"
+                    """)
+                try assertEqualSQL(db, Parent.all().joining(optional: association), """
+                    SELECT "parent".* \
+                    FROM "parent" \
+                    LEFT JOIN "child"
+                    """)
+                try assertEqualSQL(db, Parent().request(for: association), "SELECT * FROM \"child\"")
             }
         }
     }

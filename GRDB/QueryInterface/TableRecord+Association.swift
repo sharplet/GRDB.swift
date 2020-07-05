@@ -513,22 +513,26 @@ extension TableRecord where Self: EncodableRecord {
             return QueryInterfaceRequest(relation: destinationRelation)
             
         case let .join(identifier: _, expression: expression):
-            let destinationRelation = association
-                ._sqlAssociation
-                .map(\.pivot.relation, { pivotRelation in
-                    let leftAlias = TableAlias()
-                    let pivotAlias = TableAlias()
-                    return pivotRelation
-                        .qualified(with: pivotAlias)
-                        .filter { db in
-                            // Filter the pivot on self
-                            try expression(leftAlias, pivotAlias)
-                                .sqlExpression
-                                .resolved(db, with: PersistenceContainer(db, self), for: leftAlias)
-                    }
-                })
-                .destinationRelation()
-            return QueryInterfaceRequest(relation: destinationRelation)
+            let leftAlias = TableAlias()
+            let pivotAlias = TableAlias()
+            let filter = expression(leftAlias, pivotAlias).sqlExpression
+            if filter.isTrivialTrue {
+                let destinationRelation = association._sqlAssociation.destinationRelation()
+                return QueryInterfaceRequest(relation: destinationRelation)
+            } else {
+                let destinationRelation = association
+                    ._sqlAssociation
+                    .map(\.pivot.relation, { pivotRelation in
+                        pivotRelation
+                            .qualified(with: pivotAlias)
+                            .filter { db in
+                                // Filter the pivot on self
+                                try filter.resolved(db, with: PersistenceContainer(db, self), for: leftAlias)
+                        }
+                    })
+                    .destinationRelation()
+                return QueryInterfaceRequest(relation: destinationRelation)
+            }
         }
     }
 }
