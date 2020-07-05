@@ -883,7 +883,7 @@ class AssociationHasManySQLTests: GRDBTestCase {
                     FROM "parent" \
                     LEFT JOIN "child" ON "parent"."id" = "child"."parentId"
                     """)
-                try assertEqualSQL(db, Parent().request(for: association), "SELECT * FROM \"child\" WHERE \"parentId\" = 2")
+                try assertEqualSQL(db, Parent().request(for: association), "SELECT * FROM \"child\" WHERE 1 = \"parentId\"")
             }
         }
     }

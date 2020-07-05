@@ -48,22 +48,26 @@ public enum _SQLOrdering: SQLOrderingTerm {
     
     /// :nodoc:
     public func _qualifiedOrdering(with alias: TableAlias) -> SQLOrderingTerm {
-        switch self {
-        case .asc(let expression):
-            return _SQLOrdering.asc(expression._qualifiedExpression(with: alias))
-        case .desc(let expression):
-            return _SQLOrdering.desc(expression._qualifiedExpression(with: alias))
-            #if GRDBCUSTOMSQLITE
-        case .ascNullsLast(let expression):
-            return _SQLOrdering.ascNullsLast(expression._qualifiedExpression(with: alias))
-        case .descNullsFirst(let expression):
-            return _SQLOrdering.descNullsFirst(expression._qualifiedExpression(with: alias))
-            #endif
-        }
+        mapExpression { $0._qualifiedExpression(with: alias) }
     }
     
     /// :nodoc:
     public func _accept<Visitor: _SQLOrderingVisitor>(_ visitor: inout Visitor) throws {
         try visitor.visit(self)
+    }
+    
+    func mapExpression(_ transform: (SQLExpression) throws -> SQLExpression) rethrows -> _SQLOrdering {
+        switch self {
+        case .asc(let expression):
+            return try _SQLOrdering.asc(transform(expression))
+        case .desc(let expression):
+            return try _SQLOrdering.desc(transform(expression))
+            #if GRDBCUSTOMSQLITE
+        case .ascNullsLast(let expression):
+            return try _SQLOrdering.ascNullsLast(transform(expression))
+        case .descNullsFirst(let expression):
+            return try _SQLOrdering.descNullsFirst(transform(expression))
+            #endif
+        }
     }
 }

@@ -512,9 +512,23 @@ extension TableRecord where Self: EncodableRecord {
                 .destinationRelation()
             return QueryInterfaceRequest(relation: destinationRelation)
             
-        case .join:
-            #warning("TODO")
-            fatalError("Not implemented")
+        case let .join(identifier: _, expression: expression):
+            let destinationRelation = association
+                ._sqlAssociation
+                .map(\.pivot.relation, { pivotRelation in
+                    let leftAlias = TableAlias()
+                    let pivotAlias = TableAlias()
+                    return pivotRelation
+                        .qualified(with: pivotAlias)
+                        .filter { db in
+                            // Filter the pivot on self
+                            try expression(leftAlias, pivotAlias)
+                                .sqlExpression
+                                .resolved(db, with: PersistenceContainer(db, self), for: leftAlias)
+                    }
+                })
+                .destinationRelation()
+            return QueryInterfaceRequest(relation: destinationRelation)
         }
     }
 }
@@ -604,5 +618,412 @@ extension TableRecord {
     /// for individual requests with the `TableRecord.select` method.
     public static func having(_ predicate: AssociationAggregate<Self>) -> QueryInterfaceRequest<Self> {
         all().having(predicate)
+    }
+}
+
+// MARK: - SQLExpressionResolver
+
+extension SQLExpression {
+    /// Replaces alias columns by their value in the row
+    func resolved<Row: ColumnAddressable>(_ db: Database, with row: Row, for alias: TableAlias)
+        throws -> SQLExpression
+    {
+        var visitor = SQLExpressionResolver(db: db, row: row, alias: alias, expression: self)
+        try _accept(&visitor)
+        return visitor.expression
+    }
+}
+
+extension SQLSelectable {
+    /// Replaces alias columns by their value in the row
+    func resolved<Row: ColumnAddressable>(_ db: Database, with row: Row, for alias: TableAlias)
+        throws -> SQLSelectable
+    {
+        var visitor = SQLSelectableResolver(db: db, row: row, alias: alias, selectable: self)
+        try _accept(&visitor)
+        return visitor.selectable
+    }
+}
+
+extension SQLOrderingTerm {
+    /// Replaces alias columns by their value in the row
+    func resolved<Row: ColumnAddressable>(_ db: Database, with row: Row, for alias: TableAlias)
+        throws -> SQLOrderingTerm
+    {
+        var visitor = SQLOrderingTermResolver(db: db, row: row, alias: alias, orderingTerm: self)
+        try _accept(&visitor)
+        return visitor.orderingTerm
+    }
+}
+
+extension SQLCollection {
+    /// Replaces alias columns by their value in the row
+    func resolved<Row: ColumnAddressable>(_ db: Database, with row: Row, for alias: TableAlias)
+        throws -> SQLCollection
+    {
+        var visitor = SQLCollectionResolver(db: db, row: row, alias: alias, collection: self)
+        try _accept(&visitor)
+        return visitor.collection
+    }
+}
+
+extension SQLLiteral {
+    /// Replaces alias columns by their value in the row
+    func resolved<Row: ColumnAddressable>(_ db: Database, with row: Row, for alias: TableAlias)
+        throws -> SQLLiteral
+    {
+        let resolvedElements = try elements.map { element -> SQLLiteral.Element in
+            switch element {
+            case .sql:
+                return element
+            case .subquery:
+                // TODO
+                return element
+            case let .expression(expression):
+                return try .expression(expression.resolved(db, with: row, for: alias))
+            case let .selectable(selectable):
+                return try .selectable(selectable.resolved(db, with: row, for: alias))
+            case let .orderingTerm(orderingTerm):
+                return try .orderingTerm(orderingTerm.resolved(db, with: row, for: alias))
+            }
+        }
+        return SQLLiteral(elements: resolvedElements)
+    }
+}
+
+private struct SQLExpressionResolver<Row: ColumnAddressable>: _SQLExpressionVisitor {
+    let db: Database
+    let row: Row
+    let alias: TableAlias
+    var expression: SQLExpression
+    
+    mutating func visit(_ dbValue: DatabaseValue) throws { }
+    
+    mutating func visit<Column: ColumnExpression>(_ column: Column) throws { }
+    
+    mutating func visit(_ column: _SQLQualifiedColumn) throws {
+        if column.alias == alias {
+            guard let index = row.index(forColumn: column.name) else {
+                fatalError("Missing column: \(column)")
+            }
+            expression = row.databaseValue(at: index)
+        }
+    }
+    
+    mutating func visit(_ expr: _SQLExpressionBetween) throws {
+        expression = try _SQLExpressionBetween(
+            expr.resolved(db, with: row, for: alias),
+            expr.lowerBound.resolved(db, with: row, for: alias),
+            expr.upperBound.resolved(db, with: row, for: alias),
+            negated: expr.isNegated)
+    }
+    
+    mutating func visit(_ expr: _SQLExpressionBinary) throws {
+        expression = try _SQLExpressionBinary(
+            expr.op,
+            expr.lhs.resolved(db, with: row, for: alias),
+            expr.rhs.resolved(db, with: row, for: alias))
+    }
+    
+    mutating func visit(_ expr: _SQLExpressionAssociativeBinary) throws {
+        expression = try _SQLExpressionAssociativeBinary(expr.op, expr.expressions.map {
+            try $0.resolved(db, with: row, for: alias)
+        })
+    }
+    
+    mutating func visit(_ expr: _SQLExpressionCollate) throws {
+        expression = try _SQLExpressionCollate(
+            expr.expression.resolved(db, with: row, for: alias),
+            collationName: expr.collationName)
+    }
+    
+    mutating func visit(_ expr: _SQLExpressionContains) throws {
+        expression = try _SQLExpressionContains(
+            expr.expression.resolved(db, with: row, for: alias),
+            expr.collection.resolved(db, with: row, for: alias),
+            negated: expr.isNegated)
+    }
+    
+    mutating func visit(_ expr: _SQLExpressionCount) throws {
+        expression = try _SQLExpressionCount(expr.counted.resolved(db, with: row, for: alias))
+    }
+    
+    mutating func visit(_ expr: _SQLExpressionCountDistinct) throws {
+        expression = try _SQLExpressionCountDistinct(expr.counted.resolved(db, with: row, for: alias))
+    }
+    
+    mutating func visit(_ expr: _SQLExpressionEqual) throws {
+        expression = try _SQLExpressionEqual(
+            expr.op,
+            expr.lhs.resolved(db, with: row, for: alias),
+            expr.rhs.resolved(db, with: row, for: alias))
+    }
+    
+    mutating func visit(_ expr: _SQLExpressionFastPrimaryKey) throws { }
+    
+    mutating func visit(_ expr: _SQLExpressionFunction) throws {
+        expression = try _SQLExpressionFunction(expr.function, arguments: expr.arguments.map {
+            try $0.resolved(db, with: row, for: alias)
+        })
+    }
+    
+    mutating func visit(_ expr: _SQLExpressionIsEmpty) throws {
+        expression = try _SQLExpressionIsEmpty(
+            expr.countExpression.resolved(db, with: row, for: alias),
+            isEmpty: expr.isEmpty)
+    }
+    
+    mutating func visit(_ expr: _SQLExpressionLiteral) throws {
+        expression = try expr.sqlLiteral.resolved(db, with: row, for: alias).sqlExpression
+    }
+    
+    mutating func visit(_ expr: _SQLExpressionNot) throws {
+        expression = try _SQLExpressionNot(expr.expression.resolved(db, with: row, for: alias))
+    }
+    
+    mutating func visit(_ expr: _SQLExpressionQualifiedFastPrimaryKey) throws {
+        if expr.alias == alias {
+            let column = try expr.columnName(db)
+            guard let index = row.index(forColumn: column) else {
+                fatalError("Missing column: \(column)")
+            }
+            expression = row.databaseValue(at: index)
+        }
+    }
+    
+    mutating func visit(_ expr: _SQLExpressionTableMatch) throws {
+        expression = try _SQLExpressionTableMatch(
+            alias: expr.alias,
+            pattern: expr.pattern.resolved(db, with: row, for: alias))
+        
+    }
+    
+    mutating func visit(_ expr: _SQLExpressionUnary) throws {
+        expression = try _SQLExpressionUnary(expr.op, expr.expression.resolved(db, with: row, for: alias))
+    }
+    
+    mutating func visit<Request: SQLRequestProtocol>(_ request: Request) throws {
+        // TODO
+    }
+}
+
+private struct SQLSelectableResolver<Row: ColumnAddressable>: _SQLSelectableVisitor {
+    let db: Database
+    let row: Row
+    let alias: TableAlias
+    var selectable: SQLSelectable
+    
+    mutating func visit(_ selectable: AllColumns) throws { }
+    
+    mutating func visit(_ selectable: _SQLAliasedExpression) throws {
+        self.selectable = try _SQLAliasedExpression(
+            selectable.expression.resolved(db, with: row, for: alias),
+            name: selectable.name)
+    }
+    
+    mutating func visit(_ selectable: _SQLQualifiedAllColumns) throws { }
+    
+    mutating func visit(_ selectable: _SQLSelectionLiteral) throws {
+        self.selectable = try selectable.sqlLiteral.resolved(db, with: row, for: alias).sqlSelectable
+    }
+    
+    mutating func visit(_ expr: DatabaseValue) throws {
+        selectable = try expr.resolved(db, with: row, for: alias)
+    }
+    
+    mutating func visit<Column: ColumnExpression>(_ expr: Column) throws {
+        selectable = try expr.resolved(db, with: row, for: alias)
+    }
+    
+    mutating func visit(_ expr: _SQLQualifiedColumn) throws {
+        selectable = try expr.resolved(db, with: row, for: alias)
+    }
+    
+    mutating func visit(_ expr: _SQLExpressionBetween) throws {
+        selectable = try expr.resolved(db, with: row, for: alias)
+    }
+    
+    mutating func visit(_ expr: _SQLExpressionBinary) throws {
+        selectable = try expr.resolved(db, with: row, for: alias)
+    }
+    
+    mutating func visit(_ expr: _SQLExpressionAssociativeBinary) throws {
+        selectable = try expr.resolved(db, with: row, for: alias)
+    }
+    
+    mutating func visit(_ expr: _SQLExpressionCollate) throws {
+        selectable = try expr.resolved(db, with: row, for: alias)
+    }
+    
+    mutating func visit(_ expr: _SQLExpressionContains) throws {
+        selectable = try expr.resolved(db, with: row, for: alias)
+    }
+    
+    mutating func visit(_ expr: _SQLExpressionCount) throws {
+        selectable = try expr.resolved(db, with: row, for: alias)
+    }
+    
+    mutating func visit(_ expr: _SQLExpressionCountDistinct) throws {
+        selectable = try expr.resolved(db, with: row, for: alias)
+    }
+    
+    mutating func visit(_ expr: _SQLExpressionEqual) throws {
+        selectable = try expr.resolved(db, with: row, for: alias)
+    }
+    
+    mutating func visit(_ expr: _SQLExpressionFastPrimaryKey) throws {
+        selectable = try expr.resolved(db, with: row, for: alias)
+    }
+    
+    mutating func visit(_ expr: _SQLExpressionFunction) throws {
+        selectable = try expr.resolved(db, with: row, for: alias)
+    }
+    
+    mutating func visit(_ expr: _SQLExpressionIsEmpty) throws {
+        selectable = try expr.resolved(db, with: row, for: alias)
+    }
+    
+    mutating func visit(_ expr: _SQLExpressionLiteral) throws {
+        selectable = try expr.resolved(db, with: row, for: alias)
+    }
+    
+    mutating func visit(_ expr: _SQLExpressionNot) throws {
+        selectable = try expr.resolved(db, with: row, for: alias)
+    }
+    
+    mutating func visit(_ expr: _SQLExpressionQualifiedFastPrimaryKey) throws {
+        selectable = try expr.resolved(db, with: row, for: alias)
+    }
+    
+    mutating func visit(_ expr: _SQLExpressionTableMatch) throws {
+        selectable = try expr.resolved(db, with: row, for: alias)
+    }
+    
+    mutating func visit(_ expr: _SQLExpressionUnary) throws {
+        selectable = try expr.resolved(db, with: row, for: alias)
+    }
+    
+    mutating func visit<Request: SQLRequestProtocol>(_ expr: Request) throws {
+        selectable = try expr.resolved(db, with: row, for: alias)
+    }
+}
+
+private struct SQLOrderingTermResolver<Row: ColumnAddressable>: _SQLOrderingVisitor {
+    let db: Database
+    let row: Row
+    let alias: TableAlias
+    var orderingTerm: SQLOrderingTerm
+    
+    mutating func visit(_ ordering: SQLCollatedExpression) throws {
+        orderingTerm = try SQLCollatedExpression(
+            ordering.expression.resolved(db, with: row, for: alias),
+            collationName: ordering.collationName)
+    }
+    
+    mutating func visit(_ ordering: _SQLOrdering) throws {
+        orderingTerm = try ordering.mapExpression {
+            try $0.resolved(db, with: row, for: alias)
+        }
+    }
+    
+    mutating func visit(_ ordering: _SQLOrderingLiteral) throws {
+        orderingTerm = try ordering.sqlLiteral.resolved(db, with: row, for: alias).sqlOrderingTerm
+    }
+    
+    mutating func visit(_ expr: DatabaseValue) throws {
+        orderingTerm = try expr.resolved(db, with: row, for: alias)
+    }
+    
+    mutating func visit<Column: ColumnExpression>(_ expr: Column) throws {
+        orderingTerm = try expr.resolved(db, with: row, for: alias)
+    }
+    
+    mutating func visit(_ expr: _SQLQualifiedColumn) throws {
+        orderingTerm = try expr.resolved(db, with: row, for: alias)
+    }
+    
+    mutating func visit(_ expr: _SQLExpressionBetween) throws {
+        orderingTerm = try expr.resolved(db, with: row, for: alias)
+    }
+    
+    mutating func visit(_ expr: _SQLExpressionBinary) throws {
+        orderingTerm = try expr.resolved(db, with: row, for: alias)
+    }
+    
+    mutating func visit(_ expr: _SQLExpressionAssociativeBinary) throws {
+        orderingTerm = try expr.resolved(db, with: row, for: alias)
+    }
+    
+    mutating func visit(_ expr: _SQLExpressionCollate) throws {
+        orderingTerm = try expr.resolved(db, with: row, for: alias)
+    }
+    
+    mutating func visit(_ expr: _SQLExpressionContains) throws {
+        orderingTerm = try expr.resolved(db, with: row, for: alias)
+    }
+    
+    mutating func visit(_ expr: _SQLExpressionCount) throws {
+        orderingTerm = try expr.resolved(db, with: row, for: alias)
+    }
+    
+    mutating func visit(_ expr: _SQLExpressionCountDistinct) throws {
+        orderingTerm = try expr.resolved(db, with: row, for: alias)
+    }
+    
+    mutating func visit(_ expr: _SQLExpressionEqual) throws {
+        orderingTerm = try expr.resolved(db, with: row, for: alias)
+    }
+    
+    mutating func visit(_ expr: _SQLExpressionFastPrimaryKey) throws {
+        orderingTerm = try expr.resolved(db, with: row, for: alias)
+    }
+    
+    mutating func visit(_ expr: _SQLExpressionFunction) throws {
+        orderingTerm = try expr.resolved(db, with: row, for: alias)
+    }
+    
+    mutating func visit(_ expr: _SQLExpressionIsEmpty) throws {
+        orderingTerm = try expr.resolved(db, with: row, for: alias)
+    }
+    
+    mutating func visit(_ expr: _SQLExpressionLiteral) throws {
+        orderingTerm = try expr.resolved(db, with: row, for: alias)
+    }
+    
+    mutating func visit(_ expr: _SQLExpressionNot) throws {
+        orderingTerm = try expr.resolved(db, with: row, for: alias)
+    }
+    
+    mutating func visit(_ expr: _SQLExpressionQualifiedFastPrimaryKey) throws {
+        orderingTerm = try expr.resolved(db, with: row, for: alias)
+    }
+    
+    mutating func visit(_ expr: _SQLExpressionTableMatch) throws {
+        orderingTerm = try expr.resolved(db, with: row, for: alias)
+    }
+    
+    mutating func visit(_ expr: _SQLExpressionUnary) throws {
+        orderingTerm = try expr.resolved(db, with: row, for: alias)
+    }
+    
+    mutating func visit<Request: SQLRequestProtocol>(_ expr: Request) throws {
+        orderingTerm = try expr.resolved(db, with: row, for: alias)
+    }
+}
+
+private struct SQLCollectionResolver<Row: ColumnAddressable>: _SQLCollectionVisitor {
+    let db: Database
+    let row: Row
+    let alias: TableAlias
+    var collection: SQLCollection
+    
+    mutating func visit(_ collection: _SQLExpressionsArray) throws {
+        self.collection = try _SQLExpressionsArray(expressions: collection.expressions.map{
+            try $0.resolved(db, with: row, for: alias)
+        })
+    }
+    
+    mutating func visit<Request: SQLRequestProtocol>(_ request: Request) throws {
+        // TODO
     }
 }

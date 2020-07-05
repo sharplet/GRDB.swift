@@ -559,7 +559,8 @@ enum SQLAssociationCondition: Equatable {
     
     static func == (lhs: SQLAssociationCondition, rhs: SQLAssociationCondition) -> Bool {
         switch (lhs, rhs) {
-        case let (.foreignKey(request: lRequest, originIsLeft: lOrigin), .foreignKey(request: rRequest, originIsLeft: rOrigin)):
+        case let (.foreignKey(request: lRequest, originIsLeft: lOrigin),
+                  .foreignKey(request: rRequest, originIsLeft: rOrigin)):
             return lRequest == rRequest && lOrigin == rOrigin
         case let (.join(identifier: lIdentifier, expression: _), .join(identifier: rIdentifier, expression: _)):
             return lIdentifier == rIdentifier
