@@ -389,7 +389,7 @@ public struct _SQLExpressionContains: SQLExpression {
     
     /// :nodoc:
     public func _qualifiedExpression(with alias: TableAlias) -> SQLExpression {
-        return _SQLExpressionContains(
+        _SQLExpressionContains(
             expression._qualifiedExpression(with: alias),
             collection._qualifiedCollection(with: alias),
             negated: isNegated)

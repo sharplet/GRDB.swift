@@ -882,8 +882,13 @@ private struct SQLExpressionIsConstantInRequest: _SQLExpressionVisitor {
     }
     
     mutating func visit(_ expr: _SQLExpressionContains) throws {
-        // TODO: visit the collection
-        try setNotConstant() // Don't know - assume not constant
+        guard let expressions = expr.collection.expressions() else {
+            try setNotConstant() // Don't know - assume not constant
+        }
+        try expr.expression._accept(&self)
+        for expression in expressions {
+            try expression._accept(&self)
+        }
     }
     
     mutating func visit(_ expr: _SQLExpressionCount) throws {
@@ -1164,14 +1169,16 @@ extension SQLExpression {
     ///
     /// When in doubt, returns nil.
     ///
-    ///     WHERE 0                 -- nil
-    ///     WHERE id IS NULL        -- []
-    ///     WHERE id = 1            -- [1]
-    ///     WHERE id = 1 AND b = 2  -- [1]
-    ///     WHERE id = 1 AND b = 2  -- [1]
-    ///     WHERE id = 1 OR id = 2  -- [1, 2]
-    ///     WHERE id = IN (1, 2, 3) -- [1, 2, 3]
-    ///     WHERE id > 1            -- nil
+    ///     WHERE 1                               -- nil
+    ///     WHERE 0                               -- []
+    ///     WHERE NULL                            -- []
+    ///     WHERE id IS NULL                      -- []
+    ///     WHERE id = 1                          -- [1]
+    ///     WHERE id = 1 AND b = 2                -- [1]
+    ///     WHERE id = 1 OR id = 2                -- [1, 2]
+    ///     WHERE id IN (1, 2, 3)                 -- [1, 2, 3]
+    ///     WHERE id IN (1, 2) OR rowid IN (2, 3) -- [1, 2, 3]
+    ///     WHERE id > 1                          -- nil
     ///
     /// Support for `SQLQueryGenerator.optimizedSelectedRegion()`
     func identifyingRowIDs(_ db: Database, for alias: TableAlias) throws -> Set<Int64>? {
@@ -1187,7 +1194,11 @@ private struct SQLIdentifyingRowIDs: _SQLExpressionVisitor {
     let alias: TableAlias
     var rowIDs: Set<Int64>? = nil
     
-    mutating func visit(_ dbValue: DatabaseValue) throws { }
+    mutating func visit(_ dbValue: DatabaseValue) throws {
+        if dbValue.isNull || dbValue == false.databaseValue {
+            rowIDs = []
+        }
+    }
     
     mutating func visit<Column>(_ column: Column) throws where Column: ColumnExpression { }
     
@@ -1228,11 +1239,11 @@ private struct SQLIdentifyingRowIDs: _SQLExpressionVisitor {
     
     mutating func visit(_ expr: _SQLExpressionContains) throws {
         if
-            let array = expr.collection as? _SQLExpressionsArray,
+            let expressions = expr.collection.expressions(),
             let column = try expr.expression.column(db, for: alias),
             try db.columnIsRowID(column, of: alias.tableName)
         {
-            rowIDs = Set(array.expressions.compactMap {
+            rowIDs = Set(expressions.compactMap {
                 ($0 as? DatabaseValue).flatMap { Int64.fromDatabaseValue($0) }
             })
         }
@@ -1253,6 +1264,7 @@ private struct SQLIdentifyingRowIDs: _SQLExpressionVisitor {
                 if let rowID = Int64.fromDatabaseValue(dbValue) {
                     rowIDs = [rowID]
                 } else {
+                    // We miss `rowid = '1'` here, because SQLite would interpret the '1' string as a number
                     rowIDs = []
                 }
             } else if
@@ -1263,6 +1275,7 @@ private struct SQLIdentifyingRowIDs: _SQLExpressionVisitor {
                 if let rowID = Int64.fromDatabaseValue(dbValue) {
                     rowIDs = [rowID]
                 } else {
+                    // We miss `rowid = '1'` here, because SQLite would interpret the '1' string as a number
                     rowIDs = []
                 }
             }
@@ -1365,7 +1378,16 @@ private struct SQLSelectableIsAggregate: _SQLSelectableVisitor {
     }
     
     mutating func visit(_ expr: _SQLExpressionContains) throws {
+        // SELECT aggregate IN (...)
         try expr.expression._accept(&self)
+        
+        // SELECT expr IN (aggregate, ...)
+        if
+            let expressions = expr.collection.expressions(),
+            expressions.contains(where: { $0.isAggregate() })
+        {
+            try setAggregate()
+        }
     }
     
     mutating func visit(_ expr: _SQLExpressionCount) throws {

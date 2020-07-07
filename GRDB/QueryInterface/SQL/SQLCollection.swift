@@ -18,18 +18,6 @@ public protocol SQLCollection: _SQLCollection {
     func contains(_ value: SQLExpressible) -> SQLExpression
 }
 
-
-// MARK: Default Implementations
-
-/// :nodoc:
-extension SQLCollection {
-    /// Returns an expression which applies the `IN` SQL operator.
-    public func contains(_ value: SQLExpressible) -> SQLExpression {
-        _SQLExpressionContains(value, self)
-    }
-}
-
-
 // MARK: - _SQLExpressionsArray
 
 /// _SQLExpressionsArray wraps an array of expressions
@@ -42,14 +30,20 @@ public struct _SQLExpressionsArray: SQLCollection {
     
     public func contains(_ value: SQLExpressible) -> SQLExpression {
         guard let expression = expressions.first else {
-            // [].contains(Column("name")) => 0
             return false.databaseValue
         }
+        
+        // With SQLite, `expr IN (NULL)` never succeeds.
+        //
+        // We must not provide special handling of NULL, because we can not
+        // guess if our `expressions` array contains a value evaluates to NULL.
+        
         if expressions.count == 1 {
-            // ["foo"].contains(Column("name")) => name = 'foo'
-            return value == expression
+            // Output `expr = value` instead of `expr IN (value)`, because it
+            // looks nicer. And make sure we do not produce 'expr IS NULL'.
+            return _SQLExpressionEqual(.equal, value.sqlExpression, expression)
         }
-        // ["foo", "bar"].contains(Column("name")) => name IN ('foo', 'bar')
+        
         return _SQLExpressionContains(value, self)
     }
     
@@ -62,4 +56,25 @@ public struct _SQLExpressionsArray: SQLCollection {
     public func _accept<Visitor: _SQLCollectionVisitor>(_ visitor: inout Visitor) throws {
         try visitor.visit(self)
     }
+}
+
+// MARK: - SQLCollectionExpressions
+
+extension SQLCollection {
+    func expressions() -> [SQLExpression]? {
+        var visitor = SQLCollectionExpressions()
+        try! _accept(&visitor)
+        return visitor.expressions
+    }
+}
+
+/// Support for SQLCollection.expressions
+private struct SQLCollectionExpressions: _SQLCollectionVisitor {
+    var expressions: [SQLExpression]?
+    
+    mutating func visit(_ collection: _SQLExpressionsArray) throws {
+        expressions = collection.expressions
+    }
+    
+    mutating func visit<Request: SQLRequestProtocol>(_ request: Request) throws { }
 }
