@@ -1643,16 +1643,18 @@ class AssociationPrefetchingSQLTests: GRDBTestCase {
                     ORDER BY "cola1"
                     """,
                     """
-                    SELECT *, "colb2" AS "grdb_colb2" \
+                    SELECT "b".*, "a"."cola1" AS "grdb_cola1" \
                     FROM "b" \
-                    WHERE ("colb1" = 4) AND ("colb2" IN (1, 2)) \
-                    ORDER BY "colb1"
+                    JOIN "a" ON "a"."cola1" IN (1, 2) \
+                    WHERE ("b"."colb1" = 4) AND ("b"."colb2" > "a"."cola1") \
+                    ORDER BY "b"."colb1"
                     """,
                     """
-                    SELECT *, "colb2" AS "grdb_colb2" \
+                    SELECT "b".*, "a"."cola1" AS "grdb_cola1" \
                     FROM "b" \
-                    WHERE ("colb1" <> 4) AND ("colb2" IN (1, 2)) \
-                    ORDER BY "colb1"
+                    JOIN "a" ON "a"."cola1" IN (1, 2) \
+                    WHERE ("b"."colb1" <> 4) AND ("b"."colb2" > "a"."cola1") \
+                    ORDER BY "b"."colb1"
                     """])
             }
         }
