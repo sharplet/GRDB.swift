@@ -1573,7 +1573,7 @@ class AssociationPrefetchingSQLTests: GRDBTestCase {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.read { db in
             let association = A.hasMany(B.self, key: "bs", join: { a, b in
-                b["colb2"] > a["cola1"]
+                b["colb1"] >= a["cola1"] * 3
             })
             
             // Plain request
@@ -1595,7 +1595,7 @@ class AssociationPrefetchingSQLTests: GRDBTestCase {
                     SELECT "b".*, "a"."cola1" AS "grdb_cola1" \
                     FROM "b" \
                     JOIN "a" ON "a"."cola1" IN (1, 2, 3) \
-                    WHERE "b"."colb2" > "a"."cola1" \
+                    WHERE "b"."colb1" >= ("a"."cola1" * 3) \
                     ORDER BY "b"."colb1"
                     """])
             }
@@ -1646,14 +1646,14 @@ class AssociationPrefetchingSQLTests: GRDBTestCase {
                     SELECT "b".*, "a"."cola1" AS "grdb_cola1" \
                     FROM "b" \
                     JOIN "a" ON "a"."cola1" IN (1, 2) \
-                    WHERE ("b"."colb1" = 4) AND ("b"."colb2" > "a"."cola1") \
+                    WHERE ("b"."colb1" = 4) AND ("b"."colb1" >= ("a"."cola1" * 3)) \
                     ORDER BY "b"."colb1"
                     """,
                     """
                     SELECT "b".*, "a"."cola1" AS "grdb_cola1" \
                     FROM "b" \
                     JOIN "a" ON "a"."cola1" IN (1, 2) \
-                    WHERE ("b"."colb1" <> 4) AND ("b"."colb2" > "a"."cola1") \
+                    WHERE ("b"."colb1" <> 4) AND ("b"."colb1" >= ("a"."cola1" * 3)) \
                     ORDER BY "b"."colb1"
                     """])
             }
