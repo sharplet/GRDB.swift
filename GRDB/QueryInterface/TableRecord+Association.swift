@@ -129,6 +129,7 @@ extension TableRecord {
         HasManyAssociation(key: key, using: foreignKey)
     }
     
+    #warning("TODO: Make key optional")
     // TODO: doc
     public static func hasMany<Destination>(
         _ destination: Destination.Type,
