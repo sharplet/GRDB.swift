@@ -55,7 +55,7 @@ extension SQLInterpolation {
     public mutating func appendInterpolation<T>(columnsOf record: T.Type, tableAlias: String? = nil)
         where T: TableRecord
     {
-        let alias = TableAlias(name: tableAlias ?? T.databaseTableName)
+        let alias = TableAliasBase(name: tableAlias ?? T.databaseTableName)
         elements.append(contentsOf: T.databaseSelection
             .map { CollectionOfOne(.selectable($0._qualifiedSelectable(with: alias))) }
             .joined(separator: CollectionOfOne(.sql(", "))))

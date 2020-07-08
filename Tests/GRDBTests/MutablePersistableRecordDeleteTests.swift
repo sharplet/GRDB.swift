@@ -212,7 +212,7 @@ class MutablePersistableRecordDeleteTests: GRDBTestCase {
                     """)
             }
             do {
-                let alias = TableAlias(name: "p")
+                let alias = TableAlias<Player>(name: "p")
                 try Player.aliased(alias).including(required: Player.team).deleteAll(db)
                 XCTAssertEqual(self.lastSQLQuery, """
                     DELETE FROM "player" WHERE "id" IN (\

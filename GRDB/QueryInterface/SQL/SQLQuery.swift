@@ -21,7 +21,7 @@ extension SQLQuery: Refinable {
         with(\.limit, SQLLimit(limit: limit, offset: offset))
     }
     
-    func qualified(with alias: TableAlias) -> Self {
+    func qualified(with alias: TableAliasBase) -> Self {
         // We do not need to qualify group and having clauses. They will be
         // in SQLQueryGenerator.init()
         map(\.relation) { $0.qualified(with: alias) }

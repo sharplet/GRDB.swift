@@ -193,30 +193,18 @@ extension FilteredRequest {
 
 // MARK: - TableRequest {
 
-/// The protocol for all requests that feed from a database table
-public protocol TableRequest {
-    /// The name of the database table
-    var databaseTableName: String { get }
+/// Implementation details of TableRequest.
+///
+/// :nodoc:
+public protocol _TableRequest {
+    func _aliased(_ alias: TableAliasBase) -> Self
     
-    /// Creates a request that allows you to define expressions that target
-    /// a specific database table.
-    ///
-    /// In the example below, the "team.avgScore < player.score" condition in
-    /// the ON clause could be not achieved without table aliases.
-    ///
-    ///     struct Player: TableRecord {
-    ///         static let team = belongsTo(Team.self)
-    ///     }
-    ///
-    ///     // SELECT player.*, team.*
-    ///     // JOIN team ON ... AND team.avgScore < player.score
-    ///     let playerAlias = TableAlias()
-    ///     let request = Player
-    ///         .all()
-    ///         .aliased(playerAlias)
-    ///         .including(required: Player.team.filter(Column("avgScore") < playerAlias[Column("score")])
-    func aliased(_ alias: TableAlias) -> Self
+    /// The name of the database table
+    var _databaseTableName: String { get }
 }
+
+/// The protocol for all requests that feed from a database table
+public protocol TableRequest: _TableRequest { }
 
 extension TableRequest where Self: FilteredRequest {
     
@@ -238,7 +226,7 @@ extension TableRequest where Self: FilteredRequest {
             return none()
         }
         
-        let databaseTableName = self.databaseTableName
+        let databaseTableName = _databaseTableName
         return filter { db in
             let primaryKey = try db.primaryKey(databaseTableName)
             GRDBPrecondition(
@@ -268,7 +256,7 @@ extension TableRequest where Self: FilteredRequest {
             return none()
         }
         
-        let databaseTableName = self.databaseTableName
+        let databaseTableName = _databaseTableName
         return filter { db in
             try keys
                 .map { key in
@@ -301,7 +289,7 @@ extension TableRequest where Self: FilteredRequest {
 extension TableRequest where Self: OrderedRequest {
     /// Creates a request ordered by primary key.
     public func orderByPrimaryKey() -> Self {
-        let tableName = self.databaseTableName
+        let tableName = _databaseTableName
         return order { db in
             try db.primaryKey(tableName).columns.map { Column($0) }
         }
@@ -311,7 +299,7 @@ extension TableRequest where Self: OrderedRequest {
 extension TableRequest where Self: AggregatingRequest {
     /// Creates a request grouped by primary key.
     public func groupByPrimaryKey() -> Self {
-        let tableName = self.databaseTableName
+        let tableName = _databaseTableName
         return group { db in
             let primaryKey = try db.primaryKey(tableName)
             if let rowIDColumn = primaryKey.rowIDColumn {
@@ -325,6 +313,37 @@ extension TableRequest where Self: AggregatingRequest {
                 return primaryKey.columns.map { Column($0) }
             }
         }
+    }
+}
+
+// MARK: - DecodingRequest {
+
+/// The protocol for all requests that decode database rows
+public protocol DecodingRequest {
+    /// The type that decodes database rows
+    associatedtype RowDecoder
+}
+
+extension DecodingRequest where Self: TableRequest, RowDecoder: TableRecord {
+    /// Creates a request that allows you to define expressions that target
+    /// a specific database table.
+    ///
+    /// In the example below, the "team.avgScore < player.score" condition in
+    /// the ON clause could be not achieved without table aliases.
+    ///
+    ///     struct Player: TableRecord {
+    ///         static let team = belongsTo(Team.self)
+    ///     }
+    ///
+    ///     // SELECT player.*, team.*
+    ///     // JOIN team ON ... AND team.avgScore < player.score
+    ///     let playerAlias = TableAlias<Player>()
+    ///     let request = Player
+    ///         .all()
+    ///         .aliased(playerAlias)
+    ///         .including(required: Player.team.filter(Column("avgScore") < playerAlias[Column("score")])
+    public func aliased(_ alias: TableAlias<RowDecoder>) -> Self {
+        _aliased(alias)
     }
 }
 
@@ -522,21 +541,7 @@ public protocol _JoinableRequest {
 }
 
 /// The protocol for all requests that can be associated.
-public protocol JoinableRequest: _JoinableRequest {
-    /// The record type that can be associated to.
-    ///
-    /// In the request below, it is Book:
-    ///
-    ///     let request = Book.all()
-    ///
-    /// In the `belongsTo` association below, it is Author:
-    ///
-    ///     struct Book: TableRecord {
-    ///         // BelongsToAssociation<Book, Author>
-    ///         static let author = belongsTo(Author.self)
-    ///     }
-    associatedtype RowDecoder: TableRecord
-}
+public protocol JoinableRequest: DecodingRequest, _JoinableRequest { }
 
 extension JoinableRequest {
     /// Creates a request that prefetches an association.

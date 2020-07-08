@@ -22,7 +22,7 @@ public protocol SQLRequestProtocol: _SQLRequestProtocol, SQLExpression, SQLColle
 
 extension SQLRequestProtocol {
     /// :nodoc:
-    public func _qualifiedExpression(with alias: TableAlias) -> SQLExpression {
+    public func _qualifiedExpression(with alias: TableAliasBase) -> SQLExpression {
         self
     }
     
@@ -41,7 +41,7 @@ extension SQLRequestProtocol {
     }
     
     /// :nodoc:
-    public func _qualifiedCollection(with alias: TableAlias) -> SQLCollection {
+    public func _qualifiedCollection(with alias: TableAliasBase) -> SQLCollection {
         self
     }
     

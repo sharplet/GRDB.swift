@@ -42,8 +42,8 @@ public final class SQLGenerationContext {
         }
     }
     
-    private let resolvedNames: [TableAlias: String]
-    private let ownAliases: Set<TableAlias>
+    private let resolvedNames: [TableAliasBase: String]
+    private let ownAliases: Set<TableAliasBase>
     
     /// Creates a generation context.
     ///
@@ -53,7 +53,7 @@ public final class SQLGenerationContext {
     init(
         _ db: Database,
         argumentsSink: StatementArgumentsSink = StatementArgumentsSink(),
-        aliases: [TableAlias] = [])
+        aliases: [TableAliasBase] = [])
     {
         self.parent = .none(db: db, argumentsSink: argumentsSink)
         self.resolvedNames = aliases.resolvedNames
@@ -66,7 +66,7 @@ public final class SQLGenerationContext {
     /// - parameter aliases: An array of table aliases to disambiguate.
     init(
         parent: SQLGenerationContext,
-        aliases: [TableAlias] = [])
+        aliases: [TableAliasBase] = [])
     {
         self.parent = .context(parent)
         self.resolvedNames = aliases.resolvedNames
@@ -88,7 +88,7 @@ public final class SQLGenerationContext {
     ///
     /// WHERE column == 1
     /// SELECT *
-    func qualifier(for alias: TableAlias) -> String? {
+    func qualifier(for alias: TableAliasBase) -> String? {
         if alias.hasUserName {
             return alias.identityName
         }
@@ -102,7 +102,7 @@ public final class SQLGenerationContext {
     }
     
     /// WHERE <resolvedName> MATCH pattern
-    func resolvedName(for alias: TableAlias) -> String {
+    func resolvedName(for alias: TableAliasBase) -> String {
         if let name = resolvedNames[alias] {
             return name
         }
@@ -115,7 +115,7 @@ public final class SQLGenerationContext {
     }
     
     /// FROM tableName <alias>
-    func aliasName(for alias: TableAlias) -> String? {
+    func aliasName(for alias: TableAliasBase) -> String? {
         let resolvedName = self.resolvedName(for: alias)
         if resolvedName != alias.tableName {
             return resolvedName
@@ -163,7 +163,7 @@ class StatementArgumentsSink {
 /// [**Experimental**](http://github.com/groue/GRDB.swift#what-are-experimental-features)
 ///
 /// A TableAlias identifies a table in a request.
-public class TableAlias: Hashable {
+public class TableAliasBase: Hashable {
     private enum Impl {
         /// A TableAlias is undefined when it is created by the GRDB user:
         ///
@@ -208,13 +208,13 @@ public class TableAlias: Hashable {
         ///         .including(required: Player.team)
         ///         .filter(sql: "custom.name = 'Arthur'")
         ///         .aliased(customAlias)
-        case proxy(TableAlias)
+        case proxy(TableAliasBase)
     }
     
     private var impl: Impl
     
     /// Resolve all proxies
-    private var root: TableAlias {
+    private var root: TableAliasBase {
         if case .proxy(let base) = impl {
             return base.root
         } else {
@@ -255,7 +255,7 @@ public class TableAlias: Hashable {
         }
     }
     
-    public init(name: String? = nil) {
+    init(name: String? = nil) {
         self.impl = .undefined(userName: name)
     }
     
@@ -263,7 +263,7 @@ public class TableAlias: Hashable {
         self.impl = .table(tableName: tableName, userName: userName)
     }
     
-    func becomeProxy(of base: TableAlias) {
+    func becomeProxy(of base: TableAliasBase) {
         switch impl {
         case let .undefined(userName):
             if let userName = userName {
@@ -286,7 +286,7 @@ public class TableAlias: Hashable {
     }
     
     /// Returns nil if aliases can't be merged (conflict in tables, aliases...)
-    func merged(with other: TableAlias) -> TableAlias? {
+    func merged(with other: TableAliasBase) -> TableAliasBase? {
         let root = self.root
         let otherRoot = other.root
         switch (root.impl, otherRoot.impl) {
@@ -339,6 +339,26 @@ public class TableAlias: Hashable {
         }
     }
     
+    /// :nodoc:
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(ObjectIdentifier(root))
+    }
+    
+    /// :nodoc:
+    public static func == (lhs: TableAliasBase, rhs: TableAliasBase) -> Bool {
+        ObjectIdentifier(lhs.root) == ObjectIdentifier(rhs.root)
+    }
+}
+
+public final class TableAlias<Record: TableRecord>: TableAliasBase {
+    /// Creates a TableAlias.
+    ///
+    /// - parameter name: If not nil, this name is used as the table alias in
+    ///   SQL queries.
+    override public init(name: String? = nil) {
+        super.init(name: name)
+    }
+    
     /// Returns a qualified value that is able to resolve ambiguities in
     /// joined queries.
     public subscript(_ selectable: SQLSelectable) -> SQLSelectable {
@@ -376,21 +396,11 @@ public class TableAlias: Hashable {
     public var exists: SQLExpression {
         _SQLExpressionQualifiedFastPrimaryKey(alias: self) != nil
     }
-    
-    /// :nodoc:
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(ObjectIdentifier(root))
-    }
-    
-    /// :nodoc:
-    public static func == (lhs: TableAlias, rhs: TableAlias) -> Bool {
-        ObjectIdentifier(lhs.root) == ObjectIdentifier(rhs.root)
-    }
 }
 
-extension Array where Element == TableAlias {
+extension Array where Element == TableAliasBase {
     /// Resolve ambiguities in aliases' names.
-    fileprivate var resolvedNames: [TableAlias: String] {
+    fileprivate var resolvedNames: [TableAliasBase: String] {
         // It is a programmer error to reuse the same TableAlias for
         // multiple tables.
         //
@@ -406,7 +416,7 @@ extension Array where Element == TableAlias {
         }
         
         var uniqueLowercaseNames: Set<String> = []
-        var ambiguousGroups: [[TableAlias]] = []
+        var ambiguousGroups: [[TableAliasBase]] = []
         
         for (lowercaseName, group) in groups {
             if group.count > 1 {
@@ -420,7 +430,7 @@ extension Array where Element == TableAlias {
             }
         }
         
-        var resolvedNames: [TableAlias: String] = [:]
+        var resolvedNames: [TableAliasBase: String] = [:]
         for group in ambiguousGroups {
             var index = 1
             for alias in group {

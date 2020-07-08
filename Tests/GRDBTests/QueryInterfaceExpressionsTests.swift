@@ -545,7 +545,7 @@ class QueryInterfaceExpressionsTests: GRDBTestCase {
         struct Child: TableRecord { }
         
         do {
-            let parentAlias = TableAlias()
+            let parentAlias = TableAlias<Parent>()
             // Some ugly subquery whose only purpose is to use a table alias
             // which requires disambiguation in the parent query.
             let subquery = Child.select(sql: "COUNT(*)").filter(Column("childParentId") == parentAlias[Column("id")])

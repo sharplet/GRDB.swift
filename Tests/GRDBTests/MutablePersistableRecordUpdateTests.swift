@@ -439,7 +439,7 @@ class MutablePersistableRecordUpdateTests: GRDBTestCase {
                     """)
             }
             do {
-                let alias = TableAlias(name: "p")
+                let alias = TableAlias<Player>(name: "p")
                 try Player.aliased(alias).including(required: Player.team).updateAll(db, Column("score").set(to: 0))
                 XCTAssertEqual(self.lastSQLQuery, """
                     UPDATE "player" SET "score" = 0 WHERE "id" IN (\

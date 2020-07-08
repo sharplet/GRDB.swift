@@ -11,7 +11,7 @@ public protocol _SQLSelectable {
     func _columnCount(_ db: Database) throws -> Int
 
     /// Returns a qualified selectable
-    func _qualifiedSelectable(with alias: TableAlias) -> SQLSelectable
+    func _qualifiedSelectable(with alias: TableAliasBase) -> SQLSelectable
     
     /// Accepts a visitor
     func _accept<Visitor: _SQLSelectableVisitor>(_ visitor: inout Visitor) throws

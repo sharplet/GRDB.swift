@@ -40,7 +40,7 @@ public struct SQLLiteral {
             }
         }
         
-        fileprivate func qualified(with alias: TableAlias) -> Element {
+        fileprivate func qualified(with alias: TableAliasBase) -> Element {
             switch self {
             case .sql:
                 // Can't qualify raw SQL string
@@ -106,7 +106,7 @@ public struct SQLLiteral {
         try elements.map { try $0.sql(context) }.joined()
     }
     
-    fileprivate func qualified(with alias: TableAlias) -> SQLLiteral {
+    fileprivate func qualified(with alias: TableAliasBase) -> SQLLiteral {
         SQLLiteral(elements: elements.map { $0.qualified(with: alias) })
     }
 }
@@ -254,7 +254,7 @@ public struct _SQLExpressionLiteral: SQLExpression {
     }
     
     /// :nodoc:
-    public func _qualifiedExpression(with alias: TableAlias) -> SQLExpression {
+    public func _qualifiedExpression(with alias: TableAliasBase) -> SQLExpression {
         sqlLiteral.qualified(with: alias).sqlExpression
     }
     
@@ -288,7 +288,7 @@ public struct _SQLSelectionLiteral: SQLSelectable {
     }
     
     /// :nodoc:
-    public func _qualifiedSelectable(with alias: TableAlias) -> SQLSelectable {
+    public func _qualifiedSelectable(with alias: TableAliasBase) -> SQLSelectable {
         sqlLiteral.qualified(with: alias).sqlSelectable
     }
     
@@ -318,7 +318,7 @@ public struct _SQLOrderingLiteral: SQLOrderingTerm {
     }
     
     /// :nodoc:
-    public func _qualifiedOrdering(with alias: TableAlias) -> SQLOrderingTerm {
+    public func _qualifiedOrdering(with alias: TableAliasBase) -> SQLOrderingTerm {
         sqlLiteral.qualified(with: alias).sqlOrderingTerm
     }
     

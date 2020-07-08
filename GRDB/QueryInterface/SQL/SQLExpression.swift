@@ -19,7 +19,7 @@ public protocol _SQLExpression {
     var _negated: SQLExpression { get }
     
     /// Returns a qualified expression
-    func _qualifiedExpression(with alias: TableAlias) -> SQLExpression
+    func _qualifiedExpression(with alias: TableAliasBase) -> SQLExpression
     
     /// Accepts a visitor
     func _accept<Visitor: _SQLExpressionVisitor>(_ visitor: inout Visitor) throws
@@ -41,12 +41,12 @@ extension SQLExpression {
     }
     
     /// :nodoc:
-    public func _qualifiedSelectable(with alias: TableAlias) -> SQLSelectable {
+    public func _qualifiedSelectable(with alias: TableAliasBase) -> SQLSelectable {
         _qualifiedExpression(with: alias)
     }
     
     /// :nodoc:
-    public func _qualifiedOrdering(with alias: TableAlias) -> SQLOrderingTerm {
+    public func _qualifiedOrdering(with alias: TableAliasBase) -> SQLOrderingTerm {
         _qualifiedExpression(with: alias)
     }
 }
@@ -90,7 +90,7 @@ public struct _SQLExpressionNot: SQLExpression {
     }
     
     /// :nodoc:
-    public func _qualifiedExpression(with alias: TableAlias) -> SQLExpression {
+    public func _qualifiedExpression(with alias: TableAliasBase) -> SQLExpression {
         _SQLExpressionNot(expression._qualifiedExpression(with: alias))
     }
     

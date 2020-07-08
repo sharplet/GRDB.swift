@@ -34,7 +34,7 @@ extension AllColumns: SQLSelectable {
     }
     
     /// :nodoc:
-    public func _qualifiedSelectable(with alias: TableAlias) -> SQLSelectable {
+    public func _qualifiedSelectable(with alias: TableAliasBase) -> SQLSelectable {
         _SQLQualifiedAllColumns(alias: alias)
     }
     
@@ -55,9 +55,9 @@ extension AllColumns: SQLSelectable {
 ///
 /// :nodoc:
 public struct _SQLQualifiedAllColumns {
-    let alias: TableAlias
+    let alias: TableAliasBase
     
-    init(alias: TableAlias) {
+    init(alias: TableAliasBase) {
         self.alias = alias
     }
 }
@@ -67,7 +67,7 @@ extension _SQLQualifiedAllColumns: SQLSelectable {
     public func _count(distinct: Bool) -> _SQLCount? { nil }
     
     /// :nodoc:
-    public func _qualifiedSelectable(with alias: TableAlias) -> SQLSelectable {
+    public func _qualifiedSelectable(with alias: TableAliasBase) -> SQLSelectable {
         // Never requalify
         return self
     }
@@ -101,7 +101,7 @@ public struct _SQLAliasedExpression: SQLSelectable {
     }
     
     /// :nodoc:
-    public func _qualifiedSelectable(with alias: TableAlias) -> SQLSelectable {
+    public func _qualifiedSelectable(with alias: TableAliasBase) -> SQLSelectable {
         _SQLAliasedExpression(expression._qualifiedExpression(with: alias), name: name)
     }
     

@@ -1,4 +1,4 @@
-extension TableRequest where Self: FilteredRequest {
+extension DecodingRequest where Self: FilteredRequest, Self: TableRequest {
     
     // MARK: Full Text Search
     
@@ -15,9 +15,9 @@ extension TableRequest where Self: FilteredRequest {
         guard let pattern = pattern else {
             return none()
         }
-        let alias = TableAlias()
+        let alias = TableAliasBase()
         let matchExpression = _SQLExpressionTableMatch(alias: alias, pattern: pattern.databaseValue)
-        return self.aliased(alias).filter(matchExpression)
+        return _aliased(alias).filter(matchExpression)
     }
 }
 

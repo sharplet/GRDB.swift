@@ -82,7 +82,7 @@ class AssociationAggregateTests: GRDBTestCase {
     func testAggregateWithJoiningMethodAndTableAliasAndSQLSnippet() throws {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.read { db in
-            let tableAlias = TableAlias(name: "custom")
+            let tableAlias = TableAlias<Player>(name: "custom")
             let request = Team
                 .annotated(with: Team.players.count)
                 .joining(required: Team.players.aliased(tableAlias).filter(sql: "custom.score < ?", arguments: [500]))

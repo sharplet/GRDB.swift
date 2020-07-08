@@ -232,7 +232,7 @@ public enum SQLDateModifier: SQLExpression {
     }
     
     /// :nodoc:
-    public func _qualifiedExpression(with alias: TableAlias) -> SQLExpression {
+    public func _qualifiedExpression(with alias: TableAliasBase) -> SQLExpression {
         self
     }
     

@@ -292,7 +292,7 @@ class QueryInterfaceRequestTests: GRDBTestCase {
                 static let author = belongsTo(Author.self)
             }
             
-            let alias = TableAlias()
+            let alias = TableAlias<Author>()
             let request = Book
                 .annotated(with: alias[Column("name")])
                 .joining(required: Book.author.aliased(alias))

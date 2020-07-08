@@ -7,7 +7,7 @@ class SQLExpressionIsConstantTests: XCTestCase {
         
         XCTAssertFalse(Column("a").isConstantInRequest)
         
-        XCTAssertFalse(Column("a")._qualifiedExpression(with: TableAlias()).isConstantInRequest)
+        XCTAssertFalse(Column("a")._qualifiedExpression(with: TableAliasBase()).isConstantInRequest)
         
         XCTAssertTrue(SQLDateModifier.day(1).isConstantInRequest)
         
@@ -33,7 +33,7 @@ class SQLExpressionIsConstantTests: XCTestCase {
         
         XCTAssertFalse(_SQLExpressionFastPrimaryKey().isConstantInRequest)
         
-        XCTAssertFalse(_SQLExpressionFastPrimaryKey()._qualifiedExpression(with: TableAlias()).isConstantInRequest)
+        XCTAssertFalse(_SQLExpressionFastPrimaryKey()._qualifiedExpression(with: TableAliasBase()).isConstantInRequest)
         
         XCTAssertTrue(length("foo".databaseValue).isConstantInRequest)
         XCTAssertFalse(length(Column("a")).isConstantInRequest)

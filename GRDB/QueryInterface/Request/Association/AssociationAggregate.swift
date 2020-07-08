@@ -9,11 +9,11 @@ extension AssociationToMany {
         -> AssociationAggregate<OriginRowDecoder>
     {
         AssociationAggregate { request in
-            let tableAlias = TableAlias()
+            let tableAlias = TableAlias<RowDecoder>()
             request = request
                 .joining(optional: self.aliased(tableAlias))
                 .groupByPrimaryKey()
-            return expressionPromise.map { tableAlias[$0] }
+            return expressionPromise.map { $0._qualifiedExpression(with: tableAlias) }
         }
     }
     

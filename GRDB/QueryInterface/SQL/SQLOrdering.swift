@@ -8,7 +8,7 @@ public protocol _SQLOrderingTerm {
     var _reversed: SQLOrderingTerm { get }
     
     /// Returns a qualified ordering
-    func _qualifiedOrdering(with alias: TableAlias) -> SQLOrderingTerm
+    func _qualifiedOrdering(with alias: TableAliasBase) -> SQLOrderingTerm
     
     /// Accepts a visitor
     func _accept<Visitor: _SQLOrderingVisitor>(_ visitor: inout Visitor) throws
@@ -47,7 +47,7 @@ public enum _SQLOrdering: SQLOrderingTerm {
     }
     
     /// :nodoc:
-    public func _qualifiedOrdering(with alias: TableAlias) -> SQLOrderingTerm {
+    public func _qualifiedOrdering(with alias: TableAliasBase) -> SQLOrderingTerm {
         switch self {
         case .asc(let expression):
             return _SQLOrdering.asc(expression._qualifiedExpression(with: alias))

@@ -235,7 +235,7 @@ extension SQLRelation: Refinable {
             .map(\.children, { $0.mapValues { $0.map(\.relation, { $0.unordered() }) } })
     }
     
-    func qualified(with alias: TableAlias) -> Self {
+    func qualified(with alias: TableAliasBase) -> Self {
         map(\.source) { $0.qualified(with: alias) }
     }
 }
@@ -390,10 +390,10 @@ extension SQLRelation: _JoinableRequest {
 // MARK: - SQLSource
 
 enum SQLSource {
-    case table(tableName: String, alias: TableAlias?)
+    case table(tableName: String, alias: TableAliasBase?)
     indirect case subquery(SQLQuery)
     
-    func qualified(with alias: TableAlias) -> SQLSource {
+    func qualified(with alias: TableAliasBase) -> SQLSource {
         switch self {
         case let .table(tableName, sourceAlias):
             if let sourceAlias = sourceAlias {
@@ -427,7 +427,7 @@ extension SQLRelation {
                 }
             }
             
-            func qualified(with alias: TableAlias) -> Element {
+            func qualified(with alias: TableAliasBase) -> Element {
                 switch self {
                 case .terms(let terms):
                     return .terms(terms.map { $0.map { $0._qualifiedOrdering(with: alias) } })
@@ -474,7 +474,7 @@ extension SQLRelation {
                 isReversed: !isReversed)
         }
         
-        func qualified(with alias: TableAlias) -> Ordering {
+        func qualified(with alias: TableAliasBase) -> Ordering {
             Ordering(
                 elements: elements.map { $0.qualified(with: alias) },
                 isReversed: isReversed)
@@ -627,7 +627,7 @@ extension JoinMapping {
     ///   JOIN operator.
     /// - Returns: An array of SQL expression that should be joined with
     ///   the AND operator and qualified with the right table.
-    func joinExpressions(leftAlias: TableAlias) -> [SQLExpression] {
+    func joinExpressions(leftAlias: TableAliasBase) -> [SQLExpression] {
         map {
             Column($0.right) == _SQLQualifiedColumn($0.left, alias: leftAlias)
         }

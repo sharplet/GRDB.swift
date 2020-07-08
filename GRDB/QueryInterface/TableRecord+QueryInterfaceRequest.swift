@@ -356,7 +356,7 @@ extension TableRecord {
     ///     let request = Player
     ///         .aliased(playerAlias)
     ///         .including(required: Player.team.filter(Column("avgScore") < playerAlias[Column("score")])
-    public static func aliased(_ alias: TableAlias) -> QueryInterfaceRequest<Self> {
+    public static func aliased(_ alias: TableAlias<Self>) -> QueryInterfaceRequest<Self> {
         all().aliased(alias)
     }
 }

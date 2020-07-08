@@ -289,11 +289,13 @@ extension QueryInterfaceRequest: _JoinableRequest {
     }
 }
 
+extension QueryInterfaceRequest: DecodingRequest { }
+
 extension QueryInterfaceRequest: JoinableRequest where RowDecoder: TableRecord { }
 
 extension QueryInterfaceRequest: TableRequest {
     /// :nodoc:
-    public var databaseTableName: String {
+    public var _databaseTableName: String {
         switch query.relation.source {
         case .table(tableName: let tableName, alias: _):
             // Use case:
@@ -317,24 +319,8 @@ extension QueryInterfaceRequest: TableRequest {
         }
     }
     
-    /// Creates a request that allows you to define expressions that target
-    /// a specific database table.
-    ///
-    /// In the example below, the "team.avgScore < player.score" condition in
-    /// the ON clause could be not achieved without table aliases.
-    ///
-    ///     struct Player: TableRecord {
-    ///         static let team = belongsTo(Team.self)
-    ///     }
-    ///
-    ///     // SELECT player.*, team.*
-    ///     // JOIN team ON ... AND team.avgScore < player.score
-    ///     let playerAlias = TableAlias()
-    ///     let request = Player
-    ///         .all()
-    ///         .aliased(playerAlias)
-    ///         .including(required: Player.team.filter(Column("avgScore") < playerAlias[Column("score")])
-    public func aliased(_ alias: TableAlias) -> QueryInterfaceRequest {
+    /// :nodoc:
+    public func _aliased(_ alias: TableAliasBase) -> QueryInterfaceRequest {
         map(\.query) { $0.qualified(with: alias) }
     }
 }
@@ -506,7 +492,7 @@ private func prefetch(_ db: Database, associations: [_SQLAssociation], in rows: 
                 .joinMapping(originIsLeft: originIsLeft)
             let pivotFilter = pivotMapping.joinExpression(leftRows: rows)
             let pivotColumns = pivotMapping.map(\.right)
-            let pivotAlias = TableAlias()
+            let pivotAlias = TableAliasBase()
             
             let prefetchedRelation = association
                 .map(\.pivot.relation, { pivotRelation in
@@ -516,7 +502,9 @@ private func prefetch(_ db: Database, associations: [_SQLAssociation], in rows: 
                 })
                 .destinationRelation()
                 // Annotate with the pivot columns that allow grouping
-                .annotated(with: pivotColumns.map { pivotAlias[Column($0)].forKey("grdb_\($0)") })
+                .annotated(with: pivotColumns.map {
+                    Column($0)._qualifiedExpression(with: pivotAlias).forKey("grdb_\($0)")
+                })
             
             prefetchedGroups = try QueryInterfaceRequest<Row>(relation: prefetchedRelation)
                 .fetchAll(db)

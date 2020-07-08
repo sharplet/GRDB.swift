@@ -82,7 +82,7 @@ extension SQLCollatedExpression: SQLOrderingTerm {
     }
     
     /// :nodoc:
-    public func _qualifiedOrdering(with alias: TableAlias) -> SQLOrderingTerm {
+    public func _qualifiedOrdering(with alias: TableAliasBase) -> SQLOrderingTerm {
         SQLCollatedExpression(expression._qualifiedExpression(with: alias), collationName: collationName)
     }
     

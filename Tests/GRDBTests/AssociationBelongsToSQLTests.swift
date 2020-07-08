@@ -1176,7 +1176,7 @@ class AssociationBelongsToSQLTests: GRDBTestCase {
                 t.column("authorID", .integer).references("author")
             }
             
-            let authorAlias = TableAlias()
+            let authorAlias = TableAlias<Author>()
             let request = Book
                 .joining(optional: Book.author.aliased(authorAlias))
                 .filter(!authorAlias.exists)

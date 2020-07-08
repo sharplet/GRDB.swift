@@ -42,7 +42,7 @@ class AssociationTableAliasTestsSQLTests : GRDBTestCase {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
             do {
-                let alias = TableAlias()
+                let alias = TableAlias<A>()
                 let name = Column("name")
                 let condition = name != nil && alias[name] == "foo"
                 
@@ -79,7 +79,7 @@ class AssociationTableAliasTestsSQLTests : GRDBTestCase {
                 }
             }
             do {
-                let alias = TableAlias(name: "customA")
+                let alias = TableAlias<A>(name: "customA")
                 let name = Column("name")
                 let condition = name != nil && alias[name] == "foo"
                 
@@ -202,9 +202,9 @@ class AssociationTableAliasTestsSQLTests : GRDBTestCase {
         //   .include(B1.aliased("customB"))
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
-            let aAlias1 = TableAlias(name: "customA1")  // On TableMapping and QueryInterfaceRequest
-            let bAlias = TableAlias(name: "customB")    // On BelongsToAssociation
-            let aAlias2 = TableAlias(name: "customA2")  // On HasOneAssociation
+            let aAlias1 = TableAlias<A>(name: "customA1")  // On TableMapping and QueryInterfaceRequest
+            let bAlias = TableAlias<B>(name: "customB")    // On BelongsToAssociation
+            let aAlias2 = TableAlias<A>(name: "customA2")  // On HasOneAssociation
             
             let expectedSQL = """
                 SELECT "customA1".*, "customB".*, "customA2".* \
@@ -244,7 +244,7 @@ class AssociationTableAliasTestsSQLTests : GRDBTestCase {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
             do {
-                let bAlias = TableAlias(name: A.databaseTableName.lowercased())
+                let bAlias = TableAlias<B>(name: A.databaseTableName.lowercased())
                 let request = A.including(required: A.b1.aliased(bAlias))
                 try assertEqualSQL(db, request, """
                     SELECT "a1".*, "a".* \
@@ -253,7 +253,7 @@ class AssociationTableAliasTestsSQLTests : GRDBTestCase {
                     """)
             }
             do {
-                let bAlias = TableAlias(name: A.databaseTableName.uppercased())
+                let bAlias = TableAlias<B>(name: A.databaseTableName.uppercased())
                 let request = A.including(required: A.b1.aliased(bAlias))
                 try assertEqualSQL(db, request, """
                     SELECT "a1".*, "A".* \
@@ -262,7 +262,7 @@ class AssociationTableAliasTestsSQLTests : GRDBTestCase {
                     """)
             }
             do {
-                let aAlias = TableAlias(name: B.databaseTableName.lowercased())
+                let aAlias = TableAlias<A>(name: B.databaseTableName.lowercased())
                 let request = A.aliased(aAlias).including(required: A.b1)
                 try assertEqualSQL(db, request, """
                     SELECT "b".*, "b1".* \
@@ -271,7 +271,7 @@ class AssociationTableAliasTestsSQLTests : GRDBTestCase {
                     """)
             }
             do {
-                let aAlias = TableAlias(name: B.databaseTableName.uppercased())
+                let aAlias = TableAlias<A>(name: B.databaseTableName.uppercased())
                 let request = A.aliased(aAlias).including(required: A.b1)
                 try assertEqualSQL(db, request, """
                     SELECT "B".*, "b1".* \
@@ -289,9 +289,9 @@ class AssociationTableAliasTestsSQLTests : GRDBTestCase {
         
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
-            let rootA = TableAlias()
-            let A1 = TableAlias()
-            let A2 = TableAlias()
+            let rootA = TableAlias<A>()
+            let A1 = TableAlias<A>()
+            let A2 = TableAlias<A>()
             let name = Column("name")
             
             let condition = name != nil && rootA[name] > A1[name] && A2[name] == "foo"
@@ -337,7 +337,7 @@ class AssociationTableAliasTestsSQLTests : GRDBTestCase {
         try dbQueue.inDatabase { db in
             do {
                 let request: QueryInterfaceRequest<A> = {
-                    let parentAlias = TableAlias()
+                    let parentAlias = TableAlias<A>()
                     let name = Column("name")
                     return A
                         .joining(required: A.parent.aliased(parentAlias))
@@ -345,7 +345,7 @@ class AssociationTableAliasTestsSQLTests : GRDBTestCase {
                 }()
                 
                 let request2: QueryInterfaceRequest<A> = {
-                    let parentAlias = TableAlias()
+                    let parentAlias = TableAlias<A>()
                     let name = Column("name")
                     return request
                         .joining(optional: A.parent.aliased(parentAlias))
@@ -364,7 +364,7 @@ class AssociationTableAliasTestsSQLTests : GRDBTestCase {
             }
             do {
                 let request: QueryInterfaceRequest<A> = {
-                    let parentAlias = TableAlias(name: "parent")
+                    let parentAlias = TableAlias<A>(name: "parent")
                     let name = Column("name")
                     return A
                         .joining(required: A.parent.aliased(parentAlias))
@@ -372,7 +372,7 @@ class AssociationTableAliasTestsSQLTests : GRDBTestCase {
                 }()
                 
                 let request2: QueryInterfaceRequest<A> = {
-                    let parentAlias = TableAlias()
+                    let parentAlias = TableAlias<A>()
                     let name = Column("name")
                     return request
                         .joining(optional: A.parent.aliased(parentAlias))
@@ -391,7 +391,7 @@ class AssociationTableAliasTestsSQLTests : GRDBTestCase {
             }
             do {
                 let request: QueryInterfaceRequest<A> = {
-                    let parentAlias = TableAlias()
+                    let parentAlias = TableAlias<A>()
                     let name = Column("name")
                     return A
                         .joining(required: A.parent.aliased(parentAlias))
@@ -399,7 +399,7 @@ class AssociationTableAliasTestsSQLTests : GRDBTestCase {
                 }()
                 
                 let request2: QueryInterfaceRequest<A> = {
-                    let parentAlias = TableAlias(name: "parent")
+                    let parentAlias = TableAlias<A>(name: "parent")
                     let name = Column("name")
                     return request
                         .joining(optional: A.parent.aliased(parentAlias))
@@ -418,7 +418,7 @@ class AssociationTableAliasTestsSQLTests : GRDBTestCase {
             }
             do {
                 let request: QueryInterfaceRequest<A> = {
-                    let parentAlias = TableAlias(name: "parent")
+                    let parentAlias = TableAlias<A>(name: "parent")
                     let name = Column("name")
                     return A
                         .joining(required: A.parent.aliased(parentAlias))
@@ -426,7 +426,7 @@ class AssociationTableAliasTestsSQLTests : GRDBTestCase {
                 }()
                 
                 let request2: QueryInterfaceRequest<A> = {
-                    let parentAlias = TableAlias(name: "parent")
+                    let parentAlias = TableAlias<A>(name: "parent")
                     let name = Column("name")
                     return request
                         .joining(optional: A.parent.aliased(parentAlias))
@@ -445,7 +445,7 @@ class AssociationTableAliasTestsSQLTests : GRDBTestCase {
             }
             do {
                 let request: QueryInterfaceRequest<A> = {
-                    let parentAlias = TableAlias()
+                    let parentAlias = TableAlias<A>()
                     let name = Column("name")
                     return A
                         .joining(required: A.parent.aliased(parentAlias))
@@ -453,14 +453,14 @@ class AssociationTableAliasTestsSQLTests : GRDBTestCase {
                 }()
                 
                 let request2: QueryInterfaceRequest<A> = {
-                    let parentAlias = TableAlias()
+                    let parentAlias = TableAlias<A>()
                     let name = Column("name")
                     return request
                         .joining(optional: A.parent.aliased(parentAlias))
                         .order(parentAlias[name])
                 }()
                 
-                let parentAlias = TableAlias(name: "parent")
+                let parentAlias = TableAlias<A>(name: "parent")
                 let request3 = request2.including(optional: A.parent.aliased(parentAlias))
                 
                 try assertEqualSQL(db, request3, """

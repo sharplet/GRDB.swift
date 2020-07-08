@@ -46,7 +46,7 @@ public struct _SQLExpressionUnary: SQLExpression {
     }
     
     /// :nodoc:
-    public func _qualifiedExpression(with alias: TableAlias) -> SQLExpression {
+    public func _qualifiedExpression(with alias: TableAliasBase) -> SQLExpression {
         _SQLExpressionUnary(op, expression._qualifiedExpression(with: alias))
     }
     
@@ -143,7 +143,7 @@ public struct _SQLExpressionBinary: SQLExpression {
     }
     
     /// :nodoc:
-    public func _qualifiedExpression(with alias: TableAlias) -> SQLExpression {
+    public func _qualifiedExpression(with alias: TableAliasBase) -> SQLExpression {
         _SQLExpressionBinary(op, lhs._qualifiedExpression(with: alias), rhs._qualifiedExpression(with: alias))
     }
     
@@ -275,7 +275,7 @@ public struct _SQLExpressionAssociativeBinary: SQLExpression {
     }
     
     /// :nodoc:
-    public func _qualifiedExpression(with alias: TableAlias) -> SQLExpression {
+    public func _qualifiedExpression(with alias: TableAliasBase) -> SQLExpression {
         _SQLExpressionAssociativeBinary(op, expressions.map { $0._qualifiedExpression(with: alias) })
     }
     
@@ -352,7 +352,7 @@ public struct _SQLExpressionEqual: SQLExpression {
     }
     
     /// :nodoc:
-    public func _qualifiedExpression(with alias: TableAlias) -> SQLExpression {
+    public func _qualifiedExpression(with alias: TableAliasBase) -> SQLExpression {
         _SQLExpressionEqual(op, lhs._qualifiedExpression(with: alias), rhs._qualifiedExpression(with: alias))
     }
     
@@ -409,7 +409,7 @@ public struct _SQLExpressionContains: SQLExpression {
     }
     
     /// :nodoc:
-    public func _qualifiedExpression(with alias: TableAlias) -> SQLExpression {
+    public func _qualifiedExpression(with alias: TableAliasBase) -> SQLExpression {
         _SQLExpressionContains(
             expression: expression._qualifiedExpression(with: alias),
             collection: collection._qualifiedCollection(with: alias),
@@ -450,7 +450,7 @@ public struct _SQLExpressionBetween: SQLExpression {
     }
     
     /// :nodoc:
-    public func _qualifiedExpression(with alias: TableAlias) -> SQLExpression {
+    public func _qualifiedExpression(with alias: TableAliasBase) -> SQLExpression {
         _SQLExpressionBetween(
             expression._qualifiedExpression(with: alias),
             lowerBound._qualifiedExpression(with: alias),
@@ -481,7 +481,7 @@ public struct _SQLExpressionFunction: SQLExpression {
     }
     
     /// :nodoc:
-    public func _qualifiedExpression(with alias: TableAlias) -> SQLExpression {
+    public func _qualifiedExpression(with alias: TableAliasBase) -> SQLExpression {
         _SQLExpressionFunction(function, arguments: arguments.map { $0._qualifiedExpression(with: alias) })
     }
     
@@ -508,7 +508,7 @@ public struct _SQLExpressionCount: SQLExpression {
     }
     
     /// :nodoc:
-    public func _qualifiedExpression(with alias: TableAlias) -> SQLExpression {
+    public func _qualifiedExpression(with alias: TableAliasBase) -> SQLExpression {
         _SQLExpressionCount(counted._qualifiedSelectable(with: alias))
     }
     
@@ -534,7 +534,7 @@ public struct _SQLExpressionCountDistinct: SQLExpression {
     }
     
     /// :nodoc:
-    public func _qualifiedExpression(with alias: TableAlias) -> SQLExpression {
+    public func _qualifiedExpression(with alias: TableAliasBase) -> SQLExpression {
         _SQLExpressionCountDistinct(counted._qualifiedExpression(with: alias))
     }
     
@@ -567,7 +567,7 @@ public struct _SQLExpressionIsEmpty: SQLExpression {
     }
     
     /// :nodoc:
-    public func _qualifiedExpression(with alias: TableAlias) -> SQLExpression {
+    public func _qualifiedExpression(with alias: TableAliasBase) -> SQLExpression {
         _SQLExpressionIsEmpty(countExpression._qualifiedExpression(with: alias), isEmpty: isEmpty)
     }
     
@@ -581,11 +581,11 @@ public struct _SQLExpressionIsEmpty: SQLExpression {
 
 /// :nodoc:
 public struct _SQLExpressionTableMatch: SQLExpression {
-    var alias: TableAlias
+    var alias: TableAliasBase
     var pattern: SQLExpression
     
     /// :nodoc:
-    public func _qualifiedExpression(with alias: TableAlias) -> SQLExpression {
+    public func _qualifiedExpression(with alias: TableAliasBase) -> SQLExpression {
         _SQLExpressionTableMatch(
             alias: self.alias,
             pattern: pattern._qualifiedExpression(with: alias))
@@ -615,7 +615,7 @@ public struct _SQLExpressionCollate: SQLExpression {
     }
     
     /// :nodoc:
-    public func _qualifiedExpression(with alias: TableAlias) -> SQLExpression {
+    public func _qualifiedExpression(with alias: TableAliasBase) -> SQLExpression {
         _SQLExpressionCollate(expression._qualifiedExpression(with: alias), collationName: collationName)
     }
     
@@ -636,7 +636,7 @@ public struct _SQLExpressionCollate: SQLExpression {
 /// :nodoc:
 public struct _SQLExpressionFastPrimaryKey: SQLExpression {
     /// :nodoc:
-    public func _qualifiedExpression(with alias: TableAlias) -> SQLExpression {
+    public func _qualifiedExpression(with alias: TableAliasBase) -> SQLExpression {
         _SQLExpressionQualifiedFastPrimaryKey(alias: alias)
     }
     
@@ -648,10 +648,10 @@ public struct _SQLExpressionFastPrimaryKey: SQLExpression {
 
 /// :nodoc:
 public struct _SQLExpressionQualifiedFastPrimaryKey: SQLExpression {
-    let alias: TableAlias
+    let alias: TableAliasBase
     
     /// :nodoc:
-    public func _qualifiedExpression(with alias: TableAlias) -> SQLExpression {
+    public func _qualifiedExpression(with alias: TableAliasBase) -> SQLExpression {
         // Never requalify
         self
     }

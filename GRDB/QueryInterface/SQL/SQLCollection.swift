@@ -5,7 +5,7 @@
 /// :nodoc:
 public protocol _SQLCollection {
     /// Returns a qualified collection
-    func _qualifiedCollection(with alias: TableAlias) -> SQLCollection
+    func _qualifiedCollection(with alias: TableAliasBase) -> SQLCollection
     
     /// Accepts a visitor
     func _accept<Visitor: _SQLCollectionVisitor>(_ visitor: inout Visitor) throws
@@ -48,7 +48,7 @@ public struct _SQLExpressionsArray: SQLCollection {
     }
     
     /// :nodoc:
-    public func _qualifiedCollection(with alias: TableAlias) -> SQLCollection {
+    public func _qualifiedCollection(with alias: TableAliasBase) -> SQLCollection {
         _SQLExpressionsArray(expressions: expressions.map { $0._qualifiedExpression(with: alias) })
     }
     

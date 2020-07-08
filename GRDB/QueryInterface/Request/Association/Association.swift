@@ -10,7 +10,7 @@ public protocol _Association {
 
 /// The base protocol for all associations that define a connection between two
 /// record types.
-public protocol Association: _Association, DerivableRequest {
+public protocol Association: _Association, DerivableRequest where RowDecoder: TableRecord {
     // OriginRowDecoder and RowDecoder inherited from DerivableRequest provide
     // type safety:
     //
@@ -256,35 +256,8 @@ extension Association {
         forKey(codingKey.stringValue)
     }
     
-    /// Creates an association that allows you to define expressions that target
-    /// a specific database table.
-    ///
-    /// In the example below, the "team.color = 'red'" condition in the where
-    /// clause could be not achieved without table aliases.
-    ///
-    ///     struct Player: TableRecord {
-    ///         static let team = belongsTo(Team.self)
-    ///     }
-    ///
-    ///     // SELECT player.*, team.*
-    ///     // JOIN team ON ...
-    ///     // WHERE team.color = 'red'
-    ///     let teamAlias = TableAlias()
-    ///     let request = Player
-    ///         .including(required: Player.team.aliased(teamAlias))
-    ///         .filter(teamAlias[Column("color")] == "red")
-    ///
-    /// When you give a name to a table alias, you can reliably inject sql
-    /// snippets in your requests:
-    ///
-    ///     // SELECT player.*, custom.*
-    ///     // JOIN team custom ON ...
-    ///     // WHERE custom.color = 'red'
-    ///     let teamAlias = TableAlias(name: "custom")
-    ///     let request = Player
-    ///         .including(required: Player.team.aliased(teamAlias))
-    ///         .filter(sql: "custom.color = ?", arguments: ["red"])
-    public func aliased(_ alias: TableAlias) -> Self {
+    /// :nodoc:
+    public func _aliased(_ alias: TableAliasBase) -> Self {
         mapDestinationRelation { $0.qualified(with: alias) }
     }
 }
@@ -292,7 +265,7 @@ extension Association {
 // TableRequest
 extension Association {
     /// :nodoc:
-    public var databaseTableName: String { RowDecoder.databaseTableName }
+    public var _databaseTableName: String { RowDecoder.databaseTableName }
 }
 
 // MARK: - AssociationToOne

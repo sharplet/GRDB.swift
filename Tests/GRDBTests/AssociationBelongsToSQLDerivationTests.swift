@@ -85,7 +85,7 @@ class AssociationBelongsToSQLDerivationTests: GRDBTestCase {
                     """)
             }
             do {
-                let aAlias = TableAlias()
+                let aAlias = TableAlias<A>()
                 let request = A
                     .aliased(aAlias)
                     .including(required: A.b
@@ -129,7 +129,7 @@ class AssociationBelongsToSQLDerivationTests: GRDBTestCase {
                     """)
             }
             do {
-                let alias = TableAlias()
+                let alias = TableAlias<A>()
                 let request = A
                     .aliased(alias)
                     .including(required: A.b
@@ -157,7 +157,7 @@ class AssociationBelongsToSQLDerivationTests: GRDBTestCase {
                     """)
             }
             do {
-                let bAlias = TableAlias(name: "customB")
+                let bAlias = TableAlias<B>(name: "customB")
                 let request = A.including(required: A.b
                     .aliased(bAlias)
                     .filter(sql: "customB.name = ?", arguments: ["foo"]))
@@ -173,7 +173,7 @@ class AssociationBelongsToSQLDerivationTests: GRDBTestCase {
     func testFilterAssociationInWhereClause() throws {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
-            let bAlias = TableAlias()
+            let bAlias = TableAlias<B>()
             let request = A
                 .including(required: A.b.aliased(bAlias))
                 .filter(bAlias[Column("name")] != nil)

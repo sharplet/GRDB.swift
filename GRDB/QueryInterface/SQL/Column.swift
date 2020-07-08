@@ -26,7 +26,7 @@ public protocol ColumnExpression: SQLExpression {
 
 extension ColumnExpression {
     /// :nodoc:
-    public func _qualifiedExpression(with alias: TableAlias) -> SQLExpression {
+    public func _qualifiedExpression(with alias: TableAliasBase) -> SQLExpression {
         _SQLQualifiedColumn(name, alias: alias)
     }
     
@@ -65,16 +65,16 @@ public struct Column: ColumnExpression {
 /// :nodoc:
 public struct _SQLQualifiedColumn: ColumnExpression {
     public var name: String
-    let alias: TableAlias
+    let alias: TableAliasBase
     
     /// Creates a column given its name.
-    init(_ name: String, alias: TableAlias) {
+    init(_ name: String, alias: TableAliasBase) {
         self.name = name
         self.alias = alias
     }
     
     /// :nodoc:
-    public func _qualifiedExpression(with alias: TableAlias) -> SQLExpression {
+    public func _qualifiedExpression(with alias: TableAliasBase) -> SQLExpression {
         // Never requalify
         self
     }

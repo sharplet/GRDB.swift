@@ -277,13 +277,13 @@ struct SQLQueryGenerator: Refinable {
             fatalError("Can't delete without any database table")
         }
         
-        let alias = TableAlias(tableName: tableName)
+        let alias = TableAliasBase(tableName: tableName)
         let context = SQLGenerationContext(db, aliases: [alias])
         let subqueryContext = SQLGenerationContext(parent: context, aliases: relation.allAliases)
         let primaryKey = _SQLExpressionFastPrimaryKey()
         
         var sql = "DELETE FROM \(tableName.quotedDatabaseIdentifier) WHERE "
-        sql += try alias[primaryKey].expressionSQL(context, wrappedInParenthesis: false)
+        sql += try primaryKey._qualifiedExpression(with: alias).expressionSQL(context, wrappedInParenthesis: false)
         sql += " IN ("
         sql += try map(\.relation, { $0.selectOnly([primaryKey]) }).requestSQL(subqueryContext)
         sql += ")"
@@ -383,7 +383,7 @@ struct SQLQueryGenerator: Refinable {
             return nil
         }
         
-        let alias = TableAlias(tableName: tableName)
+        let alias = TableAliasBase(tableName: tableName)
         let context = SQLGenerationContext(db, aliases: [alias])
         let subqueryContext = SQLGenerationContext(parent: context, aliases: relation.allAliases)
         let primaryKey = _SQLExpressionFastPrimaryKey()
@@ -403,7 +403,7 @@ struct SQLQueryGenerator: Refinable {
         
         // WHERE id IN (SELECT id FROM ...)
         sql += " WHERE "
-        sql += try alias[primaryKey].expressionSQL(context, wrappedInParenthesis: false)
+        sql += try primaryKey._qualifiedExpression(with: alias).expressionSQL(context, wrappedInParenthesis: false)
         sql += " IN ("
         sql += try map(\.relation, { $0.selectOnly([primaryKey]) }).requestSQL(subqueryContext)
         sql += ")"
@@ -498,7 +498,7 @@ struct SQLQueryGenerator: Refinable {
 ///            • selectionPromise
 private struct SQLQualifiedRelation {
     /// All aliases, including aliases of joined relations
-    var allAliases: [TableAlias] {
+    var allAliases: [TableAliasBase] {
         joins.reduce(into: [source.alias].compactMap { $0 }) {
             $0.append(contentsOf: $1.value.relation.allAliases)
         }
@@ -663,7 +663,7 @@ extension SQLQualifiedRelation: Refinable { }
 
 /// A "qualified" source, where all tables are identified with a table alias.
 private enum SQLQualifiedSource {
-    case table(tableName: String, alias: TableAlias)
+    case table(tableName: String, alias: TableAliasBase)
     indirect case subquery(SQLQueryGenerator)
     
     /// Nil for subquery sources.
@@ -676,7 +676,7 @@ private enum SQLQualifiedSource {
     /// which does not need any alias:
     ///
     ///     SELECT COUNT(*) FROM (SELECT ...)
-    var alias: TableAlias? {
+    var alias: TableAliasBase? {
         switch self {
         case let .table(_, alias):
             return alias
@@ -688,7 +688,7 @@ private enum SQLQualifiedSource {
     init(_ source: SQLSource) {
         switch source {
         case let .table(tableName, alias):
-            let alias = alias ?? TableAlias(tableName: tableName)
+            let alias = alias ?? TableAliasBase(tableName: tableName)
             self = .table(tableName: tableName, alias: alias)
         case let .subquery(subquery):
             self = .subquery(SQLQueryGenerator(query: subquery))
@@ -742,7 +742,7 @@ private struct SQLQualifiedJoin: Refinable {
         self.relation = SQLQualifiedRelation(child.relation)
     }
     
-    func sql(_ context: SQLGenerationContext, leftAlias: TableAlias) throws -> String {
+    func sql(_ context: SQLGenerationContext, leftAlias: TableAliasBase) throws -> String {
         try sql(context, leftAlias: leftAlias, allowingInnerJoin: true)
     }
     
@@ -753,7 +753,7 @@ private struct SQLQualifiedJoin: Refinable {
     
     private func sql(
         _ context: SQLGenerationContext,
-        leftAlias: TableAlias,
+        leftAlias: TableAliasBase,
         allowingInnerJoin allowsInnerJoin: Bool)
         throws -> String
     {
@@ -961,7 +961,7 @@ extension SQLExpression {
     /// - parameter acceptsBijection: If true, expressions that define a
     ///   bijection on a column return this column. For example: `-score`
     ///   returns `score`.
-    func column(_ db: Database, for alias: TableAlias, acceptsBijection: Bool = false) throws -> String? {
+    func column(_ db: Database, for alias: TableAliasBase, acceptsBijection: Bool = false) throws -> String? {
         var visitor = SQLTableColumnVisitor(db: db, alias: alias, acceptsBijection: acceptsBijection)
         try _accept(&visitor)
         return visitor.column
@@ -971,7 +971,7 @@ extension SQLExpression {
 /// Support for `SQLExpression.column(_:for:)`
 private struct SQLTableColumnVisitor: _SQLExpressionVisitor {
     let db: Database
-    let alias: TableAlias
+    let alias: TableAliasBase
     let acceptsBijection: Bool
     var column: String?
     
@@ -1067,7 +1067,7 @@ extension SQLExpression {
     ///     WHERE a > 1                     -- []
     ///
     /// Support for `SQLQueryGenerator.expectsSingleResult()`
-    func identifyingColums(_ db: Database, for alias: TableAlias) throws -> Set<String> {
+    func identifyingColums(_ db: Database, for alias: TableAliasBase) throws -> Set<String> {
         var visitor = SQLIdentifyingColumns(db: db, alias: alias)
         do {
             try _accept(&visitor)
@@ -1083,7 +1083,7 @@ extension SQLExpression {
 private struct SQLIdentifyingColumns: _SQLExpressionVisitor {
     struct BreakError: Error { }
     let db: Database
-    let alias: TableAlias
+    let alias: TableAliasBase
     var columns: Set<String> = []
     
     mutating func visit(_ dbValue: DatabaseValue) throws { }
@@ -1172,7 +1172,7 @@ extension SQLExpression {
     ///     WHERE id > 1                          -- nil
     ///
     /// Support for `SQLQueryGenerator.optimizedSelectedRegion()`
-    func identifyingRowIDs(_ db: Database, for alias: TableAlias) throws -> Set<Int64>? {
+    func identifyingRowIDs(_ db: Database, for alias: TableAliasBase) throws -> Set<Int64>? {
         var visitor = SQLIdentifyingRowIDs(db: db, alias: alias)
         try _accept(&visitor)
         return visitor.rowIDs
@@ -1182,7 +1182,7 @@ extension SQLExpression {
 /// Support for `SQLExpression.identifyingRowIDs(_:for:)`
 private struct SQLIdentifyingRowIDs: _SQLExpressionVisitor {
     let db: Database
-    let alias: TableAlias
+    let alias: TableAliasBase
     var rowIDs: Set<Int64>? = nil
     
     mutating func visit(_ dbValue: DatabaseValue) throws {

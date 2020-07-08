@@ -33,7 +33,7 @@ extension QueryInterfaceRequest where RowDecoder == Player {
     }
     
     func orderedByTeamName() -> QueryInterfaceRequest<Player> {
-        let teamAlias = TableAlias()
+        let teamAlias = TableAlias<Team>()
         return joining(optional: PlayerWithOptionalTeam.team.aliased(teamAlias))
             .order(teamAlias[Column("name")], Column("name"))
     }
