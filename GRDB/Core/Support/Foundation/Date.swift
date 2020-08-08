@@ -1,6 +1,6 @@
 import Foundation
 #if SWIFT_PACKAGE
-import CSQLite
+@_implementationOnly import CSQLite
 #elseif GRDBCIPHER
 import SQLCipher
 #elseif !GRDBCUSTOMSQLITE && !GRDBCIPHER
@@ -125,7 +125,6 @@ extension Date: StatementColumnConvertible {
     /// - parameters:
     ///     - sqliteStatement: A pointer to an SQLite statement.
     ///     - index: The column index.
-    @inlinable
     public init(sqliteStatement: SQLiteStatement, index: Int32) {
         switch sqlite3_column_type(sqliteStatement, index) {
         case SQLITE_INTEGER, SQLITE_FLOAT:

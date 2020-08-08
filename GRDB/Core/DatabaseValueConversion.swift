@@ -1,5 +1,5 @@
 #if SWIFT_PACKAGE
-import CSQLite
+@_implementationOnly import CSQLite
 #elseif GRDBCIPHER
 import SQLCipher
 #elseif !GRDBCUSTOMSQLITE && !GRDBCIPHER
@@ -272,7 +272,6 @@ extension DatabaseValueConvertible {
 
 /// Lossless conversions from database values and rows
 extension DatabaseValueConvertible where Self: StatementColumnConvertible {
-    @inlinable
     static func fastDecode(from sqliteStatement: SQLiteStatement, atUncheckedIndex index: Int32) -> Self {
         if sqlite3_column_type(sqliteStatement, index) == SQLITE_NULL {
             fatalConversionError(to: Self.self, sqliteStatement: sqliteStatement, index: index)
@@ -280,7 +279,6 @@ extension DatabaseValueConvertible where Self: StatementColumnConvertible {
         return self.init(sqliteStatement: sqliteStatement, index: index)
     }
     
-    @inlinable
     static func fastDecode(from row: Row, atUncheckedIndex index: Int) -> Self {
         if let sqliteStatement = row.sqliteStatement {
             return fastDecode(from: sqliteStatement, atUncheckedIndex: Int32(index))
@@ -288,7 +286,6 @@ extension DatabaseValueConvertible where Self: StatementColumnConvertible {
         return row.fastDecode(Self.self, atUncheckedIndex: index)
     }
     
-    @inlinable
     static func fastDecodeIfPresent(from sqliteStatement: SQLiteStatement, atUncheckedIndex index: Int32) -> Self? {
         if sqlite3_column_type(sqliteStatement, index) == SQLITE_NULL {
             return nil
@@ -296,7 +293,6 @@ extension DatabaseValueConvertible where Self: StatementColumnConvertible {
         return self.init(sqliteStatement: sqliteStatement, index: index)
     }
     
-    @inlinable
     static func fastDecodeIfPresent(from row: Row, atUncheckedIndex index: Int) -> Self? {
         if let sqliteStatement = row.sqliteStatement {
             return fastDecodeIfPresent(from: sqliteStatement, atUncheckedIndex: Int32(index))
@@ -307,7 +303,6 @@ extension DatabaseValueConvertible where Self: StatementColumnConvertible {
 
 // Support for @inlinable decoding
 extension Row {
-    @usableFromInline
     func fastDecode<Value: DatabaseValueConvertible & StatementColumnConvertible>(
         _ type: Value.Type,
         atUncheckedIndex index: Int)
@@ -316,7 +311,6 @@ extension Row {
         return impl.fastDecode(type, atUncheckedIndex: index)
     }
     
-    @usableFromInline
     func fastDecodeIfPresent<Value: DatabaseValueConvertible & StatementColumnConvertible>(
         _ type: Value.Type,
         atUncheckedIndex index: Int)

@@ -1,6 +1,6 @@
 import Foundation
 #if SWIFT_PACKAGE
-import CSQLite
+@_implementationOnly import CSQLite
 #elseif GRDBCIPHER
 import SQLCipher
 #elseif !GRDBCUSTOMSQLITE && !GRDBCIPHER
@@ -68,7 +68,6 @@ extension UUID: DatabaseValueConvertible {
 }
 
 extension UUID: StatementColumnConvertible {
-    @inlinable
     public init(sqliteStatement: SQLiteStatement, index: Int32) {
         switch sqlite3_column_type(sqliteStatement, index) {
         case SQLITE_TEXT:

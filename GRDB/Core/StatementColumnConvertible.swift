@@ -1,5 +1,5 @@
 #if SWIFT_PACKAGE
-import CSQLite
+@_implementationOnly import CSQLite
 #elseif GRDBCIPHER
 import SQLCipher
 #elseif !GRDBCUSTOMSQLITE && !GRDBCIPHER
@@ -89,7 +89,6 @@ public final class FastDatabaseValueCursor<Value: DatabaseValueConvertible & Sta
     }
     
     /// :nodoc:
-    @inlinable
     public func next() throws -> Value? {
         if _done {
             // make sure this instance never yields a value again, even if the
@@ -148,7 +147,6 @@ public final class FastNullableDatabaseValueCursor<Value>: Cursor
     }
     
     /// :nodoc:
-    @inlinable
     public func next() throws -> Value?? {
         if _done {
             // make sure this instance never yields a value again, even if the

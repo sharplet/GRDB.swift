@@ -1,6 +1,6 @@
 import Foundation
 #if SWIFT_PACKAGE
-import CSQLite
+@_implementationOnly import CSQLite
 #elseif GRDBCIPHER
 import SQLCipher
 #elseif !GRDBCUSTOMSQLITE && !GRDBCIPHER
@@ -441,7 +441,6 @@ public final class RecordCursor<Record: FetchableRecord>: Cursor {
     }
     
     /// :nodoc:
-    @inlinable
     public func next() throws -> Record? {
         if _done {
             // make sure this instance never yields a value again, even if the
